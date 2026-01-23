@@ -1,17 +1,13 @@
-//
-//  ddApp.swift
-//  dd
-//
-//  Created by Elgun Qasimzade on 16.01.26.
-//
-
 import SwiftUI
 
 @main
 struct ddApp: App {
+    @StateObject private var localization = LocalizationManager.shared
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(localization)
         }
     }
 }

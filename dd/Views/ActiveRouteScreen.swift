@@ -1,0 +1,228 @@
+import SwiftUI
+
+struct ActiveRouteScreen: View {
+    let routeId: String
+    @State private var route: RouteDetails?
+    @State private var isLoading = true
+    @State private var checkedItems: Set<String> = []
+    @EnvironmentObject var localization: LocalizationManager
+    
+    // For navigation to Summary
+    @State private var showTripSummary = false
+    
+    var totalSavings: Double {
+        route?.stops.flatMap { $0.items }
+            .filter { checkedItems.contains($0.id) }
+            .reduce(0.0) { $0 + $1.savings } ?? 0.0
+    }
+    
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Active Trip".localized)
+                            .font(.headline)
+                         // Broken down for compiler
+                        let stopsText = "\(route?.stops.count ?? 0) " + "Stops".localized
+                        let timeText = " • \(route?.estTime ?? "--")"
+                        Text(stopsText + timeText)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    Spacer()
+                    // Broken down for compiler
+                    let amountText = String(format: "%.2f", totalSavings)
+                    let text = "\(amountText) ₼ " + "Savings".localized
+                    Text(text)
+                        .font(.caption).bold()
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.green.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+                .padding()
+                .background(Color.white)
+                .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 5)
+                .zIndex(1)
+                
+                if isLoading {
+                    ProgressView().padding(.top, 50)
+                    Spacer()
+                } else if let stops = route?.stops {
+                    ScrollView {
+                        ZStack(alignment: .leading) {
+                            // Connector Line
+                            if stops.count > 1 {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: 2)
+                                    .padding(.top, 40)
+                                    .padding(.bottom, 40)
+                                    .padding(.leading, 35) // Approximate center of number badge
+                            }
+                            
+                            VStack(spacing: 24) {
+                                ForEach(stops) { stop in
+                                    StopCard(stop: stop, checkedItems: $checkedItems)
+                                }
+                            }
+                            .padding()
+                        }
+                    }
+                } else {
+                    Spacer()
+                }
+                
+                // Footer
+                VStack {
+                     NavigationLink(destination: TripSummaryScreen(), isActive: $showTripSummary) { EmptyView() }
+                    
+                    Button(action: {
+                        Task {
+                            let checkedItemsCount = checkedItems.count
+                            let timeSpent = route?.estTime ?? "0 mins"
+                            
+                            do {
+                                try await APIService.shared.completeTrip(
+                                    totalSavings: totalSavings,
+                                    timeSpent: timeSpent,
+                                    dealsScouted: checkedItemsCount
+                                )
+                            } catch {
+                                print("Failed to save trip: \(error)")
+                            }
+                            
+                            showTripSummary = true
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "checkmark.circle")
+                            Text("Complete Shopping Trip".localized)
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                        .background(Color.green)
+                        .cornerRadius(16)
+                        .shadow(color: .green.opacity(0.3), radius: 10, x: 0, y: 5)
+                    }
+                }
+                .padding()
+                .background(Color.white)
+                .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: -5)
+            }
+        }
+        .background(Color(UIColor.systemGroupedBackground))
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            do {
+                route = try await APIService.shared.getRouteDetails(optionId: routeId)
+            } catch {
+                print("Error loading active route: \(error)")
+            }
+            isLoading = false
+        }
+    }
+}
+
+struct StopCard: View {
+    let stop: RouteStore
+    @Binding var checkedItems: Set<String>
+    @EnvironmentObject var localization: LocalizationManager
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(stop.color == "red" ? Color.red.opacity(0.1) : Color.blue.opacity(0.1))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Text("\(stop.sequence)")
+                                .font(.headline)
+                                .foregroundColor(stop.color == "red" ? .red : .blue)
+                        )
+                    
+                    VStack(alignment: .leading) {
+                        Text(stop.store).font(.headline)
+                        
+                        // Broken down for compiler
+                        let distanceText = "\(stop.distance) " + "away".localized
+                        let itemsText = " • \(stop.items.count) " + "Items".localized
+                        Text(distanceText + itemsText)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Spacer()
+                
+                Button(action: {}) {
+                    Label("Navigate".localized, systemImage: "location.fill")
+                        .font(.caption).bold()
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(10)
+                }
+            }
+            .padding()
+            .background(Color.gray.opacity(0.05))
+            
+            Divider()
+            
+            // Items
+            VStack(spacing: 0) {
+                ForEach(stop.items) { item in
+                    VStack(spacing: 0) {
+                        HStack(alignment: .top, spacing: 12) {
+                            Button(action: {
+                                if checkedItems.contains(item.id) {
+                                    checkedItems.remove(item.id)
+                                } else {
+                                    checkedItems.insert(item.id)
+                                }
+                            }) {
+                                Image(systemName: checkedItems.contains(item.id) ? "checkmark.square.fill" : "square")
+                                    .font(.title3)
+                                    .foregroundColor(checkedItems.contains(item.id) ? .green : .gray)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(checkedItems.contains(item.id) ? .gray : .primary)
+                                    .strikethrough(checkedItems.contains(item.id))
+                                
+                                Text("\(item.aisle) • \(String(format: "%.2f", item.price)) ₼")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                            }
+                            
+                            Spacer()
+                            
+                            Text("Save".localized + " \(String(format: "%.2f", item.savings)) ₼")
+                                .font(.caption).bold()
+                                .foregroundColor(.green)
+                        }
+                        .padding()
+                        
+                        if item.id != stop.items.last?.id {
+                            Divider().padding(.leading, 44)
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+        .cornerRadius(24)
+        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+}
