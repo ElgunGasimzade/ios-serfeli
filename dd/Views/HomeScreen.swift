@@ -60,12 +60,15 @@ struct HomeScreen: View {
                             // Product Grid
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                                 ForEach(products) { product in
-                                    ProductCard(product: product)
-                                        .onAppear {
-                                            if product.id == products.last?.id {
-                                                loadMore()
+                                    NavigationLink(destination: ProductDetailScreen(product: product)) {
+                                        ProductCard(product: product)
+                                            .onAppear {
+                                                if product.id == products.last?.id {
+                                                    loadMore()
+                                                }
                                             }
-                                        }
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
                             .padding(.horizontal)
@@ -88,7 +91,10 @@ struct HomeScreen: View {
                             } else {
                                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                                     ForEach(searchResults) { product in
-                                        ProductCard(product: product)
+                                        NavigationLink(destination: ProductDetailScreen(product: product)) {
+                                            ProductCard(product: product)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
                                 }
                                 .padding(.horizontal)

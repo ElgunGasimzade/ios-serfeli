@@ -32,8 +32,12 @@ class APIService {
     
     func getHomeFeed(page: Int = 1, limit: Int = 20) async throws -> HomeFeedResponse {
         guard let url = URL(string: "\(baseURL)/home/feed?page=\(page)&limit=\(limit)") else { throw APIError.invalidURL }
+        
+        var request = URLRequest(url: url)
+        request.setValue(LocalizationManager.shared.language, forHTTPHeaderField: "Accept-Language")
+        
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 throw APIError.serverError
             }

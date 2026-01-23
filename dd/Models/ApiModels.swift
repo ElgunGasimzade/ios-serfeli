@@ -2,8 +2,8 @@ import Foundation
 
 // MARK: - API Constants
 struct APIConstants {
-    // static let baseURL = "https://newbackjs.onrender.com/api/v1"
-   static let baseURL = "http://localhost:8080/api/v1"
+    static let baseURL = "https://newbackjs.onrender.com/api/v1"
+    // static let baseURL = "http://localhost:8080/api/v1"
 }
 
 // MARK: - Auth
