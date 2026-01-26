@@ -162,7 +162,9 @@ struct StopCard: View {
                 
                 Spacer()
                 
-                Button(action: {}) {
+                Button(action: {
+                    openGoogleMaps(for: stop.store)
+                }) {
                     Label("Navigate".localized, systemImage: "location.fill")
                         .font(.caption).bold()
                         .padding(.horizontal, 12)
@@ -224,5 +226,39 @@ struct StopCard: View {
         .background(Color.white)
         .cornerRadius(24)
         .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+    }
+    
+    func openGoogleMaps(for storeName: String) {
+        Task {
+            do {
+                let stores = try await APIService.shared.getAvailableStores()
+                if let match = stores.first(where: { $0.name == storeName }),
+                   let lat = match.lat, let lon = match.lon {
+                    
+                    let urlStr = "comgooglemaps://?daddr=\(lat),\(lon)&directionsmode=driving"
+                    if let url = URL(string: urlStr), UIApplication.shared.canOpenURL(url) {
+                        await UIApplication.shared.open(url)
+                    } else {
+                        let browserUrl = "https://www.google.com/maps/dir/?api=1&destination=\(lat),\(lon)"
+                        if let url = URL(string: browserUrl) {
+                            await UIApplication.shared.open(url)
+                        }
+                    }
+                } else {
+                    let query = storeName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    let urlStr = "comgooglemaps://?q=\(query)"
+                    if let url = URL(string: urlStr), UIApplication.shared.canOpenURL(url) {
+                        await UIApplication.shared.open(url)
+                    } else {
+                         let browserUrl = "https://www.google.com/maps/search/?api=1&query=\(query)"
+                         if let url = URL(string: browserUrl) {
+                             await UIApplication.shared.open(url)
+                         }
+                    }
+                }
+            } catch {
+                print("Error finding store location: \(error)")
+            }
+        }
     }
 }

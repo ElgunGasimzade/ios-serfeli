@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 enum APIError: Error, LocalizedError {
     case invalidURL
@@ -29,9 +30,32 @@ class APIService {
     private func mockDelay() async {
         try? await Task.sleep(nanoseconds: 1 * 1_000_000_000) // 1 sec
     }
+
+    func getAvailableStores() async throws -> [StoreLocation] {
+        guard let url = URL(string: "\(baseURL)/stores") else { throw APIError.invalidURL }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode([StoreLocation].self, from: data)
+    }
     
-    func getHomeFeed(page: Int = 1, limit: Int = 20) async throws -> HomeFeedResponse {
-        guard let url = URL(string: "\(baseURL)/home/feed?page=\(page)&limit=\(limit)") else { throw APIError.invalidURL }
+    func getHomeFeed(page: Int = 1, limit: Int = 20, sortBy: String? = nil, storeFilter: String? = nil) async throws -> HomeFeedResponse {
+        var urlString = "\(baseURL)/home/feed?page=\(page)&limit=\(limit)"
+        
+        if let sort = sortBy {
+            urlString += "&sort=\(sort)"
+        }
+        
+        if let store = storeFilter {
+            // Encode the store name as it may contain spaces/special chars
+            if let encodedStore = store.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                urlString += "&store=\(encodedStore)"
+            }
+        }
+        
+        guard let url = URL(string: urlString) else { throw APIError.invalidURL }
         
         var request = URLRequest(url: url)
         request.setValue(LocalizationManager.shared.language, forHTTPHeaderField: "Accept-Language")
@@ -68,6 +92,17 @@ class APIService {
         if let scanId = scanId {
             urlString += "?scanId=\(scanId)"
         }
+        
+        // Append Location if enabled and available
+        if LocationManager.shared.isLocationEnabled, let loc = LocationManager.shared.location {
+            let lat = loc.coordinate.latitude
+            let lon = loc.coordinate.longitude
+            let range = LocationManager.shared.searchRangeKm
+            
+            let prefix = urlString.contains("?") ? "&" : "?"
+            urlString += "\(prefix)lat=\(lat)&lon=\(lon)&range=\(range)"
+        }
+        
         guard let url = URL(string: urlString) else { throw APIError.invalidURL }
         
             let (data, response) = try await URLSession.shared.data(from: url)

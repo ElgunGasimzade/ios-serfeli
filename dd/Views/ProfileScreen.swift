@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileScreen: View {
     @EnvironmentObject var localization: LocalizationManager
+    @StateObject var locationManager = LocationManager.shared
 
     var body: some View {
         NavigationView {
@@ -23,6 +24,17 @@ struct ProfileScreen: View {
                              Text("Azərbaycan").tag("az")
                          }
                          .pickerStyle(SegmentedPickerStyle())
+                     }
+                     
+                     Section(header: Text("Location Settings")) {
+                         Toggle("Enable Location", isOn: $locationManager.isLocationEnabled)
+                         
+                         if locationManager.isLocationEnabled {
+                             VStack(alignment: .leading) {
+                                 Text("Search Range: \(Int(locationManager.searchRangeKm)) km")
+                                 Slider(value: $locationManager.searchRangeKm, in: 1...20, step: 1)
+                             }
+                         }
                      }
                  }
                  .background(Color.clear) // clean look

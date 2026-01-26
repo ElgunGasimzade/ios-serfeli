@@ -12,6 +12,33 @@ struct HomeScreen: View {
     @State private var currentPage = 1
     @State private var isLoading = false
     @State private var canLoadMore = true
+    
+    // Sort & Filter State
+    @State private var selectedSort: SortOption = .discountPct
+    @State private var selectedStore: String? = nil
+    
+    // Fetched dynamically
+    @State private var availableStores: [String] = []
+    
+    enum SortOption: String, CaseIterable, Identifiable {
+        case discountPct = "discount_pct"
+        case priceAsc = "price_asc"
+        case priceDesc = "price_desc"
+        case discountVal = "discount_val"
+        case marketName = "market_name"
+        
+        var id: String { self.rawValue }
+        
+        var displayName: String {
+            switch self {
+            case .discountPct: return "Best Discount"
+            case .priceAsc: return "Price: Low to High"
+            case .priceDesc: return "Price: High to Low"
+            case .discountVal: return "Max Savings"
+            case .marketName: return "Store Name"
+            }
+        }
+    }
     @EnvironmentObject var localization: LocalizationManager
     
     var body: some View {
@@ -37,6 +64,95 @@ struct HomeScreen: View {
                         // Search Bar
                         SearchBar(text: $searchQuery)
                             .padding(.horizontal)
+                        
+                        // Sort & Filter Bar
+                        if searchQuery.isEmpty {
+                            HStack {
+                                // Sort Menu
+                                Menu {
+                                    ForEach(SortOption.allCases) { option in
+                                        Button(action: {
+                                            if selectedSort != option {
+                                                selectedSort = option
+                                                Task { await loadFeed(reload: true) }
+                                            }
+                                        }) {
+                                            if selectedSort == option {
+                                                Label(option.displayName, systemImage: "checkmark")
+                                            } else {
+                                                Text(option.displayName)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        // Dynamic Icon based on Sort
+                                        Group {
+                                            if selectedSort == .priceAsc {
+                                                Image(systemName: "arrow.up.circle.fill")
+                                            } else if selectedSort == .priceDesc {
+                                                Image(systemName: "arrow.down.circle.fill")
+                                            } else {
+                                                Image(systemName: "arrow.up.arrow.down")
+                                            }
+                                        }
+                                        .frame(width: 20)
+                                        
+                                        Text(selectedSort == .discountPct ? "Sort".localized : selectedSort.displayName)
+                                            .lineLimit(1)
+                                            .id(selectedSort) // Optimize transition
+                                    }
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 8)
+                                    .background(selectedSort != .discountPct ? Color.blue.opacity(0.1) : Color(.systemGray6))
+                                    .foregroundColor(selectedSort != .discountPct ? .blue : .primary)
+                                    .cornerRadius(8)
+                                    // Animation removed
+                                }
+                                
+                                // Filter Menu
+                                Menu {
+                                    Button("All Stores".localized) {
+                                        if selectedStore != nil {
+                                            selectedStore = nil
+                                            Task { await loadFeed(reload: true) }
+                                        }
+                                    }
+                                    
+                                    ForEach(availableStores, id: \.self) { store in
+                                        Button(action: {
+                                            if selectedStore != store {
+                                                selectedStore = store
+                                                Task { await loadFeed(reload: true) }
+                                            }
+                                        }) {
+                                            if selectedStore == store {
+                                                Label(store, systemImage: "checkmark")
+                                            } else {
+                                                Text(store)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "line.3.horizontal.decrease.circle")
+                                        Text(selectedStore ?? "All Stores".localized)
+                                            .fixedSize() 
+                                            .id(selectedStore)
+                                    }
+                                    .font(.subheadline)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(selectedStore != nil ? Color.blue.opacity(0.1) : Color(.systemGray6))
+                                    .foregroundColor(selectedStore != nil ? .blue : .primary)
+                                    .cornerRadius(8)
+                                    // Animation removed
+                                }
+                                
+                                Spacer()
+                            }
+                            .padding(.horizontal) // Fix: Add horizontal padding to container so Sort button isn't cut off
                         
                         if searchQuery.isEmpty {
                             // Standard Home Feed
@@ -106,11 +222,12 @@ struct HomeScreen: View {
                             .frame(maxWidth: .infinity, minHeight: 200)
                     }
                 }
-                .padding(.vertical)
+                // .padding(.vertical)
             }
             .navigationTitle("Daily Deals".localized)
             .navigationBarHidden(true)
             .task {
+                await loadStores()
                 await loadFeed(reload: true)
             }
             .task(id: searchQuery) {
@@ -133,6 +250,17 @@ struct HomeScreen: View {
             }
         }
     }
+    }
+    
+    func loadStores() async {
+        do {
+            let stores = try await APIService.shared.getAvailableStores()
+            // Map to names and sort
+            availableStores = stores.map { $0.name }.sorted()
+        } catch {
+            print("Failed to load stores: \(error)")
+        }
+    }
     
     func loadFeed(reload: Bool = false) async {
         guard !isLoading else { return }
@@ -148,7 +276,12 @@ struct HomeScreen: View {
         
         isLoading = true
         do {
-            let response = try await APIService.shared.getHomeFeed(page: currentPage, limit: 20)
+            let response = try await APIService.shared.getHomeFeed(
+                page: currentPage, 
+                limit: 20, 
+                sortBy: selectedSort.rawValue, 
+                storeFilter: selectedStore
+            )
             
             if reload {
                 homeFeed = response
@@ -318,3 +451,4 @@ struct ProductCard: View {
         .shadow(color: .black.opacity(0.05), radius: 3)
     }
 }
+

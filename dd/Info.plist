@@ -26,6 +26,8 @@
 	<string>We need access to save captured scans.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>We need access to save captured scans.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show nearby deals and estimate travel time.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

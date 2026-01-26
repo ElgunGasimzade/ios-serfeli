@@ -6,6 +6,7 @@ struct BrandSelectionScreen: View {
     @State private var isLoading = true
     @State private var selectedIds: [String] = []
     @EnvironmentObject var localization: LocalizationManager
+    @ObservedObject var locationManager = LocationManager.shared // Observe location changes
     
     var body: some View {
         Group {
@@ -32,6 +33,13 @@ struct BrandSelectionScreen: View {
                             .font(.subheadline)
                             .foregroundColor(.gray)
                         
+                        // Debug/Info: Show if location is active
+                        if locationManager.isLocationEnabled && locationManager.location == nil {
+                             Text("Locating...".localized)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                        }
+                        
                         ForEach(groups) { group in
                             if group.status == "DEAL_FOUND" {
                                 DealFoundCard(group: group, selectedIds: $selectedIds)
@@ -46,14 +54,21 @@ struct BrandSelectionScreen: View {
                 
                 // Navigation to Plan
                 NavigationLink(destination: ShoppingPlanScreen(selectedIds: selectedIds)) {
-                    Text("Continue to Route".localized)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .cornerRadius(12)
-                        .padding()
+                    VStack(spacing: 4) {
+                        Text("Start Shopping".localized)
+                            .font(.headline)
+                        if selectedIds.count > 0 {
+                            Text("\(selectedIds.count) item(s) ready")
+                                .font(.caption)
+                                .opacity(0.9)
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green)
+                    .cornerRadius(12)
+                    .padding()
                 }
             } else {
                  Text("No deals found".localized)
@@ -61,13 +76,31 @@ struct BrandSelectionScreen: View {
         }
         .navigationTitle("Review Items".localized)
         .task {
-            do {
-                response = try await APIService.shared.getBrands(scanId: scanId)
-            } catch {
-                print("Error fetching brands: \(error)")
-            }
-            isLoading = false
+            await loadData()
         }
+        // Re-fetch when location arrives (fixing the "first load no location" bug)
+        .onChange(of: locationManager.location) { newLoc in
+            if newLoc != nil {
+                Task {
+                    // Only reload if we haven't already loaded "with distance"? 
+                    // Or just simple reload to be safe.
+                    // To avoid loops, maybe check if we already have distance data? 
+                    // But re-fetching is safer and cheap enough here.
+                    await loadData()
+                }
+            }
+        }
+    }
+    
+    // Extracted fetch logic
+    private func loadData() async {
+        // If already loading and not first load? No, simplest is just overwrite.
+        do {
+            response = try await APIService.shared.getBrands(scanId: scanId)
+        } catch {
+            print("Error fetching brands: \(error)")
+        }
+        isLoading = false
     }
 }
 
@@ -169,7 +202,7 @@ struct BrandOptionRow: View {
             } placeholder: {
                 Color.gray.opacity(0.1)
             }
-            .frame(width: 72, height: 72)
+            .frame(width: 56, height: 56) // Resized to 56x56
             .padding(4)
             .background(Color.white)
             .cornerRadius(8)
@@ -177,17 +210,28 @@ struct BrandOptionRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(option.brandName).font(.body).bold()
+                    // Show badge only if present
                     if let badge = option.badge {
                         Text(badge)
                             .font(.caption2).bold()
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.1))
-                            .foregroundColor(.red)
+                            .background(Color.green.opacity(0.1)) // Green for "Cheapest"
+                            .foregroundColor(.green)
                             .cornerRadius(4)
                     }
                 }
-                Text(option.dealText).font(.caption).foregroundColor(.gray)
+                
+                // Location Info
+                HStack(spacing: 4) {
+                    Text(option.dealText).font(.caption).foregroundColor(.gray)
+                    if let dist = option.distance {
+                        Text("• \(String(format: "%.1f", dist)) km").font(.caption).foregroundColor(.gray)
+                    }
+                    if let time = option.estTime {
+                        Text("• \(time)").font(.caption).foregroundColor(.gray)
+                    }
+                }
                 
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(String(format: "%.2f", option.price ?? 0)) ₼").bold()
@@ -204,8 +248,8 @@ struct BrandOptionRow: View {
                     .font(.title2)
             } else {
                 Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 2)
-                    .frame(width: 24, height: 24)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 2)
+                .frame(width: 24, height: 24)
             }
         }
         .padding()
