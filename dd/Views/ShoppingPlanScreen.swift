@@ -206,8 +206,6 @@ struct RouteOptionCard: View {
             VStack(alignment: .leading) {
                 Text(option.stops.first?.store ?? "Store")
                     .bold()
-                Text("All items available")
-                    .font(.caption).foregroundColor(.gray)
             }
         }
         .padding()

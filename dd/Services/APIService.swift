@@ -32,7 +32,18 @@ class APIService {
     }
 
     func getAvailableStores() async throws -> [StoreLocation] {
-        guard let url = URL(string: "\(baseURL)/stores") else { throw APIError.invalidURL }
+        var urlString = "\(baseURL)/stores"
+        
+        // Append Location if enabled and available
+        if LocationManager.shared.isLocationEnabled, let loc = LocationManager.shared.location {
+            let lat = loc.coordinate.latitude
+            let lon = loc.coordinate.longitude
+            let range = LocationManager.shared.searchRangeKm
+            
+            urlString += "?lat=\(lat)&lon=\(lon)&range=\(range)"
+        }
+        
+        guard let url = URL(string: urlString) else { throw APIError.invalidURL }
         
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
@@ -53,6 +64,15 @@ class APIService {
             if let encodedStore = store.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
                 urlString += "&store=\(encodedStore)"
             }
+        }
+        
+        // Append Location if enabled and available
+        if LocationManager.shared.isLocationEnabled, let loc = LocationManager.shared.location {
+            let lat = loc.coordinate.latitude
+            let lon = loc.coordinate.longitude
+            let range = LocationManager.shared.searchRangeKm
+            
+            urlString += "&lat=\(lat)&lon=\(lon)&range=\(range)"
         }
         
         guard let url = URL(string: urlString) else { throw APIError.invalidURL }
