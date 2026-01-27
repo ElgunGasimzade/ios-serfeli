@@ -159,8 +159,11 @@ struct HomeScreen: View {
                             
                             // Hero Section
                             if let hero = feed.hero {
-                                HeroSection(hero: hero)
-                                    .padding(.horizontal)
+                                NavigationLink(destination: ProductDetailScreen(product: hero.product)) {
+                                    HeroSection(hero: hero)
+                                        .padding(.horizontal)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                             
                             // Categories
