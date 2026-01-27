@@ -7,10 +7,26 @@ struct APIConstants {
 }
 
 // MARK: - Auth
+// MARK: - Auth & User
+struct User: Codable {
+    let id: String
+    let deviceId: String
+    let email: String?
+    let phone: String?
+    let username: String?
+}
+
 struct AuthResponse: Codable {
-    let token: String
-    let guestId: String
-    let isNewUser: Bool
+    let user: User? // Made optional as some endpoints might just return success status or different structure
+    let isNewUser: Bool?
+}
+
+// MARK: - Plans / History
+struct RouteHistoryItem: Codable, Identifiable {
+    var id: String
+    var route: RouteDetails // Changed let to var
+    let date: Date
+    var status: String // "active", "completed"
 }
 
 // MARK: - Home Feed
@@ -119,18 +135,18 @@ struct RouteStopSummary: Codable, Identifiable {
 }
 
 struct RouteDetails: Codable {
-    let totalSavings: Double
-    let estTime: String
-    let stops: [RouteStore]
+    var totalSavings: Double
+    var estTime: String
+    var stops: [RouteStore] // Changed let to var
 }
 
 struct RouteStore: Codable, Identifiable {
     var id: Int { sequence }
-    let sequence: Int
-    let store: String
-    let distance: String
-    let color: String
-    let items: [RouteItem]
+    var sequence: Int
+    var store: String
+    var distance: String
+    var color: String
+    var items: [RouteItem] // Changed let to var
 }
 
 struct RouteItem: Codable, Identifiable {

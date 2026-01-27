@@ -2,6 +2,9 @@ import SwiftUI
 
 struct ActiveRouteScreen: View {
     let routeId: String
+    var preloadedRoute: RouteDetails? = nil // Optional preloaded data
+    var planId: String? = nil // Optional Plan ID if this is a saved plan
+    
     @State private var route: RouteDetails?
     @State private var isLoading = true
     @State private var checkedItems: Set<String> = []
@@ -24,7 +27,7 @@ struct ActiveRouteScreen: View {
                     VStack(alignment: .leading) {
                         Text("Active Trip".localized)
                             .font(.headline)
-                         // Broken down for compiler
+                        // Broken down for compiler
                         let stopsText = "\(route?.stops.count ?? 0) " + "Stops".localized
                         let timeText = " • \(route?.estTime ?? "--")"
                         Text(stopsText + timeText)
@@ -33,7 +36,7 @@ struct ActiveRouteScreen: View {
                     }
                     Spacer()
                     // Broken down for compiler
-                    let amountText = String(format: "%.2f", totalSavings)
+                    let amountText = String(format: "%.2f", Double(totalSavings))
                     let text = "\(amountText) ₼ " + "Savings".localized
                     Text(text)
                         .font(.caption).bold()
@@ -78,7 +81,7 @@ struct ActiveRouteScreen: View {
                 
                 // Footer
                 VStack {
-                     NavigationLink(destination: TripSummaryScreen(), isActive: $showTripSummary) { EmptyView() }
+                    // Removed NavigationLink to TripSummaryScreen
                     
                     Button(action: {
                         Task {
@@ -95,7 +98,14 @@ struct ActiveRouteScreen: View {
                                 print("Failed to save trip: \(error)")
                             }
                             
-                            showTripSummary = true
+                            // Mark as completed in PFM history
+                            if let pid = planId {
+                                RouteCacheService.shared.completePlan(id: pid, checkedItems: checkedItems)
+                            }
+                            
+                            // Return to PFM / Main screen
+                            NotificationCenter.default.post(name: NSNotification.Name("SwitchToPFM"), object: nil)
+                            presentationMode.wrappedValue.dismiss()
                         }
                     }) {
                         HStack {
@@ -119,14 +129,23 @@ struct ActiveRouteScreen: View {
         .background(Color(UIColor.systemGroupedBackground))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            do {
-                route = try await APIService.shared.getRouteDetails(optionId: routeId)
-            } catch {
-                print("Error loading active route: \(error)")
+            // ... (rest of task logic unchanged)
+            if let preloaded = preloadedRoute {
+                self.route = preloaded
+                self.isLoading = false
+            } else {
+                do {
+                    route = try await APIService.shared.getRouteDetails(optionId: routeId)
+                } catch {
+                    print("Error loading active route: \(error)")
+                }
+                isLoading = false
             }
-            isLoading = false
         }
     }
+    
+    // Environment wrapper for dismissing
+    @Environment(\.presentationMode) var presentationMode
 }
 
 struct StopCard: View {

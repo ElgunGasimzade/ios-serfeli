@@ -220,8 +220,10 @@ struct DealFoundCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header Image (First available)
-            if let firstUrl = group.options.first?.logoUrl {
-                AsyncImage(url: URL(string: firstUrl)) { image in
+            if let firstUrl = group.options.first?.logoUrl, 
+               let url = URL(string: firstUrl), 
+               firstUrl.lowercased().hasPrefix("http") { // Simple validation
+                AsyncImage(url: url) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Color.gray.opacity(0.3)

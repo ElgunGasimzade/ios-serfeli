@@ -241,4 +241,147 @@ class APIService {
         }
         return try JSONDecoder().decode(TripSummaryResponse.self, from: data)
     }
+    func deviceLogin(deviceId: String) async throws -> AuthResponse {
+        guard let url = URL(string: "\(baseURL)/auth/device-login") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["deviceId": deviceId]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(AuthResponse.self, from: data)
+    }
+    
+    func updateProfile(userId: String, email: String?, phone: String?, username: String?) async throws -> AuthResponse { // Returns { success: true, user: ... }
+        guard let url = URL(string: "\(baseURL)/auth/profile") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var body = ["userId": userId]
+        if let e = email { body["email"] = e }
+        if let p = phone { body["phone"] = p }
+        if let u = username { body["username"] = u }
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        // The endpoint returns { success: true, user: ... }, but AuthResponse is { user, isNewUser }
+        // Let's adjust expectations or struct. 
+        // Backend returns: { success: true, user: { ... } }
+        // Let's just define a generic update response wrapper in AuthController? 
+        // For simplicity, let's just reuse AuthResponse struct and ignore isNewUser (make optional).
+        
+        // Actually, let's assume the swift helper returns the full object if consistent.
+        // I should verify backend AuthController.updateProfile returns consistent structure. 
+        // It returns { success: true, user: ... }. isNewUser is missing.
+        // So decoding AuthResponse might fail if isNewUser is required.
+        // Let's modify AuthResponse above or create a new one.
+        // Or simpler: Reuse, map isNewUser manually?
+        
+        // Quick Fix: Decode as dictionary for flexibility or create a ProfileUpdateResponse struct.
+        // Let's assume we decode into a temporary struct that matches the known backend response.
+        
+        struct ProfileUpdateResponse: Codable {
+            let success: Bool
+            let user: User
+        }
+        
+        let updateRes = try JSONDecoder().decode(ProfileUpdateResponse.self, from: data)
+        return AuthResponse(user: updateRes.user, isNewUser: false)
+    }
+    
+    // Plans
+    
+    func savePlan(userId: String, route: RouteDetails) async throws -> String { // Returns PlanID
+        guard let url = URL(string: "\(baseURL)/plans") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // JSON encode the route details
+        let routeData = try JSONEncoder().encode(route)
+        let routeJson = try JSONSerialization.jsonObject(with: routeData)
+        
+        let body: [String: Any] = [
+            "userId": userId,
+            "routeDetails": routeJson,
+            "status": "active"
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        // Expected response: { id, created_at, status }
+        struct SavePlanResponse: Codable { let id: String }
+        let res = try JSONDecoder().decode(SavePlanResponse.self, from: data)
+        return res.id
+    }
+    
+    func getPlans(userId: String) async throws -> [RouteHistoryItem] {
+        guard let url = URL(string: "\(baseURL)/plans/\(userId)") else { throw APIError.invalidURL }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        // Backend returns: [{ id, route_details, created_at, status, ... }]
+        // Frontend RouteHistoryItem: { id, route, date, status }
+        // We need to decode specifically.
+        // Since property names differ ("route_details" vs "route"), we need custom decoding or backend change.
+        // Let's use a Data Transfer Object (DTO) here.
+        
+        struct PlanDTO: Codable {
+            let id: String
+            let route: RouteDetails
+            let date: String // Backend sends ISO string
+            let status: String
+        }
+        
+        let dtos = try JSONDecoder().decode([PlanDTO].self, from: data)
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        return dtos.map { dto in
+            RouteHistoryItem(
+                id: dto.id,
+                route: dto.route,
+                date: formatter.date(from: dto.date) ?? Date(),
+                status: dto.status
+            )
+        }
+    }
+    
+    func completePlan(planId: String, finalRoute: RouteDetails?) async throws {
+        guard let url = URL(string: "\(baseURL)/plans/\(planId)/complete") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let route = finalRoute {
+            let routeData = try JSONEncoder().encode(route)
+            let routeJson = try JSONSerialization.jsonObject(with: routeData)
+            let body: [String: Any] = ["routeDetails": routeJson]
+             request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
 }

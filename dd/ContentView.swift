@@ -2,31 +2,52 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var localization: LocalizationManager
+    @State private var selection = 0
+    
+    // Listen for tab switching requests
+    // Ideally this would be an injected environment object/service, but for speed, 
+    // we can use NotificationCenter or a simple SharedState if already existing.
+    // Let's use NotificationCenter for simplicity given the constraints.
+    let tabSwitchPub = NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToPFM"))
     
     var body: some View {
-        TabView {
+        TabView(selection: $selection) {
             HomeScreen()
                 .tabItem {
                     Label("Home".localized, systemImage: "house")
                 }
+                .tag(0)
             
             ScanCaptureScreen()
                 .tabItem {
                     Label("Scan".localized, systemImage: "camera.viewfinder")
                 }
+                .tag(1)
             
             // Watchlist
             WatchlistScreen()
                 .tabItem {
                     Label("Watchlist".localized, systemImage: "eye")
                 }
+                .tag(2)
             
             // Profile
             ProfileScreen()
                 .tabItem {
                     Label("Profile".localized, systemImage: "person")
                 }
+                .tag(3)
+                
+            // My Plan (PFM)
+            PFMView()
+                .tabItem {
+                    Label("My Plan".localized, systemImage: "list.bullet.clipboard")
+                }
+                .tag(4)
         }
         .accentColor(.blue)
+        .onReceive(tabSwitchPub) { _ in
+            selection = 4 // Switch to PFM tab
+        }
     }
 }

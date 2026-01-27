@@ -8,6 +8,10 @@ struct ddApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(localization)
+                .onAppear {
+                    // Trigger Guest Login / Init
+                    _ = AuthService.shared
+                }
         }
     }
 }

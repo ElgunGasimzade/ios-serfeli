@@ -87,7 +87,10 @@ struct RouteOptionCard: View {
                 
                 Spacer()
                 
-                NavigationLink(destination: ActiveRouteScreen(routeId: option.id)) {
+                // Replace NavigationLink with Button for custom logic
+                Button(action: {
+                    selectRoute(option: option)
+                }) {
                      Text("Select Route".localized)
                         .font(.subheadline)
                         .fontWeight(.bold)
@@ -211,5 +214,19 @@ struct RouteOptionCard: View {
         .padding()
         .background(Color.gray.opacity(0.05))
         .cornerRadius(12)
+    }
+    
+    private func selectRoute(option: RouteOption) {
+        Task {
+            do {
+                let details = try await APIService.shared.getRouteDetails(optionId: option.id)
+                await RouteCacheService.shared.saveRoute(details)
+                DispatchQueue.main.async {
+                     NotificationCenter.default.post(name: NSNotification.Name("SwitchToPFM"), object: nil)
+                }
+            } catch {
+                print("Error caching route: \(error)")
+            }
+        }
     }
 }
