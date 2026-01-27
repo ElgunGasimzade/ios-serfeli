@@ -39,6 +39,22 @@ struct BrandSelectionScreen: View {
                                 .font(.caption)
                                 .foregroundColor(.orange)
                         }
+
+                        // Auto-Select Buttons
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                AutoSelectButton(title: "Cheapest", icon: "tag.fill", color: .green) {
+                                    autoSelect(strategy: .cheapest)
+                                }
+                                AutoSelectButton(title: "Max Savings", icon: "arrow.down.circle.fill", color: .blue) {
+                                    autoSelect(strategy: .maxSavings)
+                                }
+                                AutoSelectButton(title: "Closest", icon: "location.fill", color: .orange) {
+                                    autoSelect(strategy: .closest)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
                         
                         ForEach(groups) { group in
                             if group.status == "DEAL_FOUND" {
@@ -102,6 +118,76 @@ struct BrandSelectionScreen: View {
         }
         isLoading = false
     }
+
+    // Auto-Select Logic
+    enum AutoSelectStrategy {
+        case cheapest
+        case maxSavings
+        case closest
+    }
+
+    private func autoSelect(strategy: AutoSelectStrategy) {
+        guard let groups = response?.groups else { return }
+        
+        var newSelection: [String] = []
+        
+        for group in groups {
+            guard !group.options.isEmpty else { continue }
+            
+            var bestOption: BrandItem?
+            
+            switch strategy {
+            case .cheapest:
+                bestOption = group.options.min(by: { ($0.price ?? 0) < ($1.price ?? 0) })
+            case .maxSavings:
+                bestOption = group.options.max(by: { $0.savings < $1.savings })
+            case .closest:
+                // Filter options that have distance, then sort
+                // If none have distance, fallback to first
+                let validOptions = group.options.filter { $0.distance != nil }
+                if !validOptions.isEmpty {
+                    bestOption = validOptions.min(by: { ($0.distance ?? 0) < ($1.distance ?? 0) })
+                } else {
+                    bestOption = group.options.first
+                }
+            }
+            
+            if let best = bestOption ?? group.options.first {
+                newSelection.append(best.id)
+            }
+        }
+        
+        // Update state with animation
+        withAnimation {
+            selectedIds = newSelection
+        }
+    }
+}
+
+struct AutoSelectButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .font(.caption).bold()
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(color.opacity(0.1))
+            .foregroundColor(color)
+            .cornerRadius(20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(color.opacity(0.3), lineWidth: 1)
+            )
+        }
+    }
 }
 
 // MARK: - Subviews
@@ -110,10 +196,25 @@ struct DealFoundCard: View {
     let group: BrandGroup
     @Binding var selectedIds: [String]
     @EnvironmentObject var localization: LocalizationManager
+    @State private var isExpanded = false
     
     // Computed property to find active selection from the Source of Truth
     private var activeSelectionId: String? {
         group.options.first(where: { selectedIds.contains($0.id) })?.id
+    }
+    
+    // Ordered options: Selected item first, then the rest
+    private var orderedOptions: [BrandItem] {
+        guard let activeId = activeSelectionId,
+              let selectedOption = group.options.first(where: { $0.id == activeId }) else {
+            return group.options
+        }
+        
+        var others = group.options.filter { $0.id != activeId }
+        // Optional: Keep others sorted by price or original order? 
+        // Original order is usually best unless we want to enforce specific sorting.
+        // Let's keep original order for others.
+        return [selectedOption] + others
     }
     
     var body: some View {
@@ -153,15 +254,43 @@ struct DealFoundCard: View {
                     }
                 }
                 
-                ForEach(group.options) { option in
+                // Options List
+                let optionsToShow = isExpanded ? orderedOptions : Array(orderedOptions.prefix(1))
+                
+                ForEach(optionsToShow) { option in
                     BrandOptionRow(
                         option: option,
                         isSelected: activeSelectionId == option.id || (activeSelectionId == nil && option.isSelected)
                     )
                     .onTapGesture {
-                        // Update Only Source of Truth
-                        selectedIds.removeAll { id in group.options.contains { $0.id == id } }
-                        selectedIds.append(option.id)
+                        withAnimation {
+                            // Update Only Source of Truth
+                            selectedIds.removeAll { id in group.options.contains { $0.id == id } }
+                            selectedIds.append(option.id)
+                        }
+                    }
+                    // Add transition for smoother expand/collapse
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                
+                // Expand/Collapse Button
+                if group.options.count > 1 {
+                    Button(action: {
+                        withAnimation {
+                            isExpanded.toggle()
+                        }
+                    }) {
+                        HStack {
+                            Text(isExpanded ? "Show Less" : "See \(group.options.count - 1) More Options")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        }
+                        .foregroundColor(.blue)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue.opacity(0.05))
+                        .cornerRadius(8)
                     }
                 }
                 
@@ -185,6 +314,9 @@ struct DealFoundCard: View {
             if activeSelectionId == nil {
                 if let defaultOption = group.options.first(where: { $0.isSelected }) {
                     selectedIds.append(defaultOption.id)
+                } else if let first = group.options.first {
+                     // Fallback if no isSelected flag
+                     selectedIds.append(first.id)
                 }
             }
         }
@@ -196,63 +328,97 @@ struct BrandOptionRow: View {
     let isSelected: Bool
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
+            // Product Image
             AsyncImage(url: URL(string: option.logoUrl)) { image in
                 image.resizable().scaledToFit()
             } placeholder: {
                 Color.gray.opacity(0.1)
             }
-            .frame(width: 56, height: 56) // Resized to 56x56
+            .frame(width: 60, height: 60)
             .padding(4)
             .background(Color.white)
             .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.1)))
             
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(option.brandName).font(.body).bold()
-                    // Show badge only if present
-                    if let badge = option.badge {
-                        Text(badge)
-                            .font(.caption2).bold()
-                            .padding(.horizontal, 6)
+            // Middle Content: Title, Store Info
+            VStack(alignment: .leading, spacing: 6) {
+                // Title (Full Width now)
+                Text(option.brandName)
+                    .font(.system(size: 14, weight: .medium)) // Slightly smaller, cleaner
+                    .lineLimit(4) // Allow even more lines
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1) // Prioritize text space
+                
+                // Store & Location Info (Gray, smaller)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.dealText) // "at Store Name"
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    
+                    if let dist = option.distance {
+                        Text("\(String(format: "%.1f", dist)) km • \(option.estTime ?? "")")
+                            .font(.system(size: 11, weight: .bold)) // Bold as requested
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            
+            Spacer(minLength: 8) // flexible spacer
+            
+            // Right Side: Price, Badge, Checkmark
+            VStack(alignment: .trailing, spacing: 4) {
+                // Checkmark
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.blue)
+                        .font(.title2)
+                } else {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 2)
+                        .frame(width: 24, height: 24)
+                }
+                
+                Spacer()
+                
+                // Badge moved here
+                if let badge = option.badge {
+                    Text(badge.uppercased())
+                        .font(.system(size: 8, weight: .bold))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.1))
+                        .foregroundColor(.green)
+                        .cornerRadius(4)
+                }
+                
+                // Pricing Block
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let original = option.originalPrice, original > (option.price ?? 0) {
+                        Text("\(String(format: "%.2f", original)) ₼")
+                            .font(.caption2)
+                            .strikethrough()
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Text("\(String(format: "%.2f", option.price ?? 0)) ₼")
+                        .font(.headline)
+                        .bold()
+                    
+                    if option.savings > 0.01 {
+                        Text("SAVE \(String(format: "%.2f", option.savings)) ₼")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 4)
                             .padding(.vertical, 2)
-                            .background(Color.green.opacity(0.1)) // Green for "Cheapest"
-                            .foregroundColor(.green)
+                            .background(Color.green)
                             .cornerRadius(4)
                     }
                 }
-                
-                // Location Info
-                HStack(spacing: 4) {
-                    Text(option.dealText).font(.caption).foregroundColor(.gray)
-                    if let dist = option.distance {
-                        Text("• \(String(format: "%.1f", dist)) km").font(.caption).foregroundColor(.gray)
-                    }
-                    if let time = option.estTime {
-                        Text("• \(time)").font(.caption).foregroundColor(.gray)
-                    }
-                }
-                
-                HStack(alignment: .firstTextBaseline) {
-                    Text("\(String(format: "%.2f", option.price ?? 0)) ₼").bold()
-                    Text("Save \(String(format: "%.2f", option.savings)) ₼")
-                        .font(.caption).foregroundColor(.green)
-                }
             }
-            
-            Spacer()
-            
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title2)
-            } else {
-                Circle()
-                .stroke(Color.gray.opacity(0.3), lineWidth: 2)
-                .frame(width: 24, height: 24)
-            }
+            .frame(minWidth: 80) // Ensure right side doesn't shrink too much
         }
-        .padding()
+        .padding(12)
         .background(isSelected ? Color.blue.opacity(0.05) : Color.white)
         .cornerRadius(12)
         .overlay(
