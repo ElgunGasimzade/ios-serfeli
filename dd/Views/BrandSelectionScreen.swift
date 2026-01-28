@@ -344,16 +344,6 @@ struct DealFoundCard: View {
                     }
                 }
                 
-                Button(action: { /* Add to list action */ }) {
-                    Text("Add to List".localized)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .cornerRadius(12)
-                }
-                
                 // Skip Button
                 Button(action: {
                     withAnimation {
