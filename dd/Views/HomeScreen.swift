@@ -193,15 +193,7 @@ struct HomeScreen: View {
                                 .buttonStyle(PlainButtonStyle())
                             }
                             
-                            // Categories
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(feed.categories) { category in
-                                        CategoryPill(category: category)
-                                    }
-                                }
-                                .padding(.horizontal)
-                            }
+                            // Categories removed per user request
                             
                             // Product Grid
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {

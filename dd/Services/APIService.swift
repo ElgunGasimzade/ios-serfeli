@@ -330,15 +330,81 @@ class APIService {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw APIError.serverError
-        }
+        let (data, _) = try await URLSession.shared.data(for: request)
         
         // Expected response: { id, created_at, status }
         struct SavePlanResponse: Codable { let id: String }
         let res = try JSONDecoder().decode(SavePlanResponse.self, from: data)
         return res.id
+    }
+    
+    // Add item to an existing plan
+    func addItemToPlan(planId: String, product: Product) async throws {
+        guard let url = URL(string: "\(baseURL)/plans/\(planId)/items") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "productId": product.id,
+            "name": product.name,
+            "brand": product.brand as Any,
+            "store": product.store,
+            "price": product.price,
+            "originalPrice": product.originalPrice ?? product.price,
+            "imageUrl": product.imageUrl as Any
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        _ = try await URLSession.shared.data(for: request)
+        // Response assumed successful if no error thrown
+    }
+    
+    // Intelligently add item to active plan or create new plan
+    func addItemToActivePlan(product: Product) async throws -> String {
+        guard let userId = AuthService.shared.userId else {
+            throw APIError.serverError
+        }
+        
+        
+        // Fetch fresh plans from backend to ensure we have the latest status
+        // Relying on RouteCacheService might be stale if not refreshed recently
+        let plans = try await getPlans(userId: userId)
+        let activePlan = plans.first(where: { $0.status == "active" })
+        
+        if let planId = activePlan?.id {
+            // Add to existing active plan
+            try await addItemToPlan(planId: planId, product: product)
+            return planId
+        } else {
+            // Create new plan with this single item
+            let routeItem = RouteItem(
+                id: product.id,
+                name: product.name,
+                aisle: product.brand ?? "",
+                price: product.price,
+                savings: (product.originalPrice ?? product.price) - product.price,
+                checked: false
+            )
+            
+            let store = RouteStore(
+                sequence: 1,
+                store: product.store ?? "Unknown Store",
+                distance: "0 km",
+                color: "#4A90E2",
+                items: [routeItem]
+            )
+            
+            let route = RouteDetails(
+                totalSavings: (product.originalPrice ?? product.price) - product.price,
+                estTime: "5 min",
+                stops: [store]
+            )
+            
+            let planId = try await savePlan(userId: userId, route: route)
+            return planId
+        }
     }
     
     func getPlans(userId: String) async throws -> [RouteHistoryItem] {

@@ -5,6 +5,12 @@ struct ProductDetailScreen: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var localization: LocalizationManager
     
+    @State private var showSuccessAlert = false
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
+    @State private var addedToPlanId: String?
+    @State private var isAddingToPlan = false
+    
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
@@ -95,20 +101,40 @@ struct ProductDetailScreen: View {
             // Bottom Action Button
             VStack {
                 Button(action: {
-                    // TODO: Add to Watchlist Logic
+                    guard !isAddingToPlan else { return }
+                    isAddingToPlan = true
+                    
+                    Task {
+                        defer { isAddingToPlan = false }
+                        do {
+                            let planId = try await APIService.shared.addItemToActivePlan(product: product)
+                            addedToPlanId = planId
+                            await RouteCacheService.shared.refreshHistory()
+                            showSuccessAlert = true
+                        } catch {
+                            errorMessage = "Failed to add item to list: \(error.localizedDescription)"
+                            showErrorAlert = true
+                        }
+                    }
                 }) {
                     HStack {
-                        Image(systemName: "cart.badge.plus")
-                        Text("Add to List".localized)
+                        if isAddingToPlan {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        } else {
+                            Image(systemName: "cart.badge.plus")
+                            Text("Add to List".localized)
+                        }
                     }
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.blue)
+                    .background(isAddingToPlan ? Color.blue.opacity(0.7) : Color.blue)
                     .cornerRadius(14)
                     .shadow(color: .blue.opacity(0.3), radius: 5, x: 0, y: 3)
                 }
+                .disabled(isAddingToPlan)
             }
             .padding()
             .background(Color.white)
@@ -116,6 +142,12 @@ struct ProductDetailScreen: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(.systemGroupedBackground))
+        .toast(isPresented: $showSuccessAlert, message: "Item added to list!".localized)
+        .alert("Error".localized, isPresented: $showErrorAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(errorMessage)
+        }
     }
     
     func openGoogleMaps(for storeName: String) {

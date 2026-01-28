@@ -18,36 +18,36 @@ struct ContentView: View {
                 }
                 .tag(0)
             
-            ScanCaptureScreen()
-                .tabItem {
-                    Label("Scan".localized, systemImage: "camera.viewfinder")
-                }
-                .tag(1)
-            
             // Watchlist
             WatchlistScreen()
                 .tabItem {
                     Label("Watchlist".localized, systemImage: "eye")
                 }
-                .tag(2)
+                .tag(1)
             
-            // Profile
-            ProfileScreen()
+            ScanCaptureScreen()
                 .tabItem {
-                    Label("Profile".localized, systemImage: "person")
+                    Label("Scan".localized, systemImage: "barcode.viewfinder")
                 }
-                .tag(3)
+                .tag(2)
                 
             // My Plan (PFM)
             PFMView()
                 .tabItem {
                     Label("My Plan".localized, systemImage: "list.bullet.clipboard")
                 }
+                .tag(3)
+            
+            // Profile
+            ProfileScreen()
+                .tabItem {
+                    Label("Profile".localized, systemImage: "person")
+                }
                 .tag(4)
         }
         .accentColor(.blue)
         .onReceive(tabSwitchPub) { _ in
-            selection = 4 // Switch to PFM tab
+            selection = 3 // Switch to PFM tab
         }
     }
 }
