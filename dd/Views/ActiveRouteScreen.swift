@@ -38,13 +38,31 @@ struct ActiveRouteScreen: View {
                     // Broken down for compiler
                     let amountText = String(format: "%.2f", Double(totalSavings))
                     let text = "\(amountText) ₼ " + "Savings".localized
-                    Text(text)
+                Text(text)
                         .font(.caption).bold()
                         .foregroundColor(.green)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color.green.opacity(0.1))
                         .clipShape(Capsule())
+                    
+                    // Mark All Button
+                    Button(action: {
+                        if let allItems = route?.stops.flatMap({ $0.items }) {
+                            if checkedItems.count == allItems.count {
+                                checkedItems.removeAll() // Toggle off if all selected? User said "mark all", usually implies select all.
+                            } else {
+                                checkedItems = Set(allItems.map { $0.id })
+                            }
+                        }
+                    }) {
+                        Image(systemName: "checklist.checked")
+                            .font(.system(size: 20))
+                            .foregroundColor(.blue)
+                            .padding(8)
+                            .background(Color.blue.opacity(0.1))
+                            .clipShape(Circle())
+                    }
                 }
                 .padding()
                 .background(Color.white)
@@ -88,19 +106,27 @@ struct ActiveRouteScreen: View {
                             let checkedItemsCount = checkedItems.count
                             let timeSpent = route?.estTime ?? "0 mins"
                             
-                            do {
-                                try await APIService.shared.completeTrip(
-                                    totalSavings: totalSavings,
-                                    timeSpent: timeSpent,
-                                    dealsScouted: checkedItemsCount
-                                )
-                            } catch {
-                                print("Failed to save trip: \(error)")
-                            }
-                            
-                            // Mark as completed in PFM history
-                            if let pid = planId {
-                                RouteCacheService.shared.completePlan(id: pid, checkedItems: checkedItems)
+                            // Only save stats if items were actually purchased
+                            if checkedItemsCount > 0 {
+                                do {
+                                    try await APIService.shared.completeTrip(
+                                        totalSavings: totalSavings,
+                                        timeSpent: timeSpent,
+                                        dealsScouted: checkedItemsCount
+                                    )
+                                } catch {
+                                    print("Failed to save trip: \(error)")
+                                }
+                                
+                                // Mark as completed in PFM history
+                                if let pid = planId {
+                                    RouteCacheService.shared.completePlan(id: pid, checkedItems: checkedItems)
+                                }
+                            } else {
+                                // If 0 items checked, DISCARD the trip completely (don't save to history)
+                                if let pid = planId {
+                                    RouteCacheService.shared.deletePlan(id: pid)
+                                }
                             }
                             
                             // Return to PFM / Main screen
@@ -141,8 +167,15 @@ struct ActiveRouteScreen: View {
                 }
                 isLoading = false
             }
-        }
+            
+            // If viewing a Completed History plan (no active planId, but route loaded),
+            // auto-check all items to show them as "Done".
+            if routeId == "history" && planId == nil, let loadedRoute = self.route {
+                let allIds = loadedRoute.stops.flatMap { $0.items }.map { $0.id }
+                self.checkedItems = Set(allIds)
+            }
     }
+    } // Close body
     
     // Environment wrapper for dismissing
     @Environment(\.presentationMode) var presentationMode

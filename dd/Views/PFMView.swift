@@ -118,7 +118,8 @@ struct PFMView: View {
                         VStack(spacing: 0) {
                             // Top: Total Saved
                             VStack(spacing: 4) {
-                                Text("\(String(format: "%.2f", totalSavedLifetime)) ₼")
+                                // Use BACKEND calculated stats
+                                Text("\(String(format: "%.2f", routeService.lifetimeStats.totalSavings)) ₼")
                                     .font(.system(size: 24, weight: .bold))
                                     .foregroundColor(.green)
                                 Text("Total Saved")
@@ -135,7 +136,7 @@ struct PFMView: View {
                             HStack(spacing: 0) {
                                 // Trips
                                 VStack(spacing: 4) {
-                                    Text("\(completedTripsCount)")
+                                    Text("\(routeService.lifetimeStats.totalTrips)")
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Text("Trips")
@@ -149,7 +150,7 @@ struct PFMView: View {
                                 
                                 // Scouted
                                 VStack(spacing: 4) {
-                                    Text("\(completedTripsCount * 12)") // Mock
+                                    Text("\(routeService.lifetimeStats.totalTrips * 12)") // Mock approximation for now
                                         .font(.headline)
                                         .foregroundColor(.purple)
                                     Text("Scouted")
@@ -268,15 +269,23 @@ struct HistoryCard: View {
             
             // Link to view details just in case?
             // For now just read-only history summary
+            // Link with hidden chevron workaround
             NavigationLink(destination: ActiveRouteScreen(routeId: "history", preloadedRoute: item.route, planId: item.status == "active" ? item.id : nil)) {
                 Text(item.status == "active" ? "Continue Shopping".localized : "View Summary".localized)
                     .font(.caption).bold()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background(item.status == "active" ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
-                    .foregroundColor(item.status == "active" ? .blue : .blue) // Keep blue text for consistency or change as needed
+                    .foregroundColor(item.status == "active" ? .blue : .blue)
                     .cornerRadius(8)
             }
+            .buttonStyle(PlainButtonStyle()) // Determines if chevron appears? No, often List style.
+            // In a ScrollView + VStack, NavigationLink usually works fine without Chevron.
+            // The issue might have been the ZStack order or opacity(0).
+            // Let's just use the direct link. If chevron appears, we can live with it or find a better CSS-like fix.
+            // But user specifically asked to remove it.
+            // In plain VStack, NavigationLink DOES NOT add a chevron.
+            // So just restoring the simple link should work and look clean.
         }
         .padding()
         .background(Color.white)

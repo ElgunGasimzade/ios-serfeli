@@ -8,6 +8,39 @@ struct BrandSelectionScreen: View {
     @EnvironmentObject var localization: LocalizationManager
     @ObservedObject var locationManager = LocationManager.shared // Observe location changes
     
+    // Calculate total savings from selected items
+    var totalSavings: Double {
+        guard let groups = response?.groups else { return 0.0 }
+        
+        // Use Set to ensure we only count each unique ID once
+        let uniqueSelectedIds = Set(selectedIds)
+        var total = 0.0
+        var countedIds = Set<String>()
+        
+        for group in groups {
+            // Only count savings from groups that have deals
+            guard group.status == "DEAL_FOUND" else { continue }
+            for option in group.options {
+                if uniqueSelectedIds.contains(option.id) && !countedIds.contains(option.id) {
+                    // Calculate savings from price difference to ensure accuracy
+                    if let original = option.originalPrice, let price = option.price {
+                        let itemSavings = original - price
+                        if itemSavings > 0 {
+                            total += itemSavings
+                            countedIds.insert(option.id)
+                            print("DEBUG: Counting \(option.brandName): \(itemSavings)₼ (ID: \(option.id))")
+                        }
+                    }
+                }
+            }
+        }
+        
+        print("DEBUG: Total savings: \(total)₼ from \(countedIds.count) unique items")
+        print("DEBUG: Selected IDs count: \(selectedIds.count), Unique: \(uniqueSelectedIds.count)")
+        
+        return total
+    }
+    
     var body: some View {
         Group {
             if isLoading {
@@ -74,7 +107,11 @@ struct BrandSelectionScreen: View {
                         Text("Start Shopping".localized)
                             .font(.headline)
                         if selectedIds.count > 0 {
-                            Text("\(selectedIds.count) item(s) ready")
+                            Text("\(selectedIds.count) item(s) ready (You save \(String(format: "%.2f", totalSavings)) ₼)")
+                                .font(.caption)
+                                .opacity(0.9)
+                        } else {
+                            Text("Select at least 1 item")
                                 .font(.caption)
                                 .opacity(0.9)
                         }
@@ -82,10 +119,11 @@ struct BrandSelectionScreen: View {
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green)
+                    .background(selectedIds.isEmpty ? Color.gray : Color.green)
                     .cornerRadius(12)
                     .padding()
                 }
+                .disabled(selectedIds.isEmpty)
             } else {
                  Text("No deals found".localized)
             }
@@ -234,11 +272,21 @@ struct DealFoundCard: View {
                     LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
                 )
                 .overlay(alignment: .bottomLeading) {
-                    HStack {
-                        Image(systemName: "checkmark.seal.fill").foregroundColor(.blue)
-                        Text("Best Value Found".localized).foregroundColor(.white).bold()
+                    if activeSelectionId == nil {
+                        HStack {
+                            Image(systemName: "slash.circle.fill").foregroundColor(.orange)
+                            Text("Skipped".localized).foregroundColor(.white).bold()
+                        }
+                        .padding()
+                    } else if let activeId = activeSelectionId, 
+                              let activeOption = group.options.first(where: { $0.id == activeId }),
+                              activeOption.savings > 0 {
+                         HStack {
+                             Image(systemName: "checkmark.seal.fill").foregroundColor(.blue)
+                             Text("Best Value Found".localized).foregroundColor(.white).bold()
+                         }
+                         .padding()
                     }
-                    .padding()
                 }
             }
             
@@ -262,7 +310,7 @@ struct DealFoundCard: View {
                 ForEach(optionsToShow) { option in
                     BrandOptionRow(
                         option: option,
-                        isSelected: activeSelectionId == option.id || (activeSelectionId == nil && option.isSelected)
+                        isSelected: activeSelectionId == option.id // Strict check
                     )
                     .onTapGesture {
                         withAnimation {
@@ -305,6 +353,21 @@ struct DealFoundCard: View {
                         .background(Color.blue)
                         .cornerRadius(12)
                 }
+                
+                // Skip Button
+                Button(action: {
+                    withAnimation {
+                         selectedIds.removeAll { id in group.options.contains { $0.id == id } }
+                         // Optionally collapse?
+                         // isExpanded = false
+                    }
+                }) {
+                    Text("Skip this item".localized)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
             }
             .padding(20)
             .background(Color.white)
@@ -312,12 +375,16 @@ struct DealFoundCard: View {
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
         .onAppear {
-            // Initial Default Population only if nothing selected yet
-            if activeSelectionId == nil {
+            // Initial Default Population only if nothing selected yet AND we haven't explicitly skipped (length check?)
+            // We can't distinguish "not yet loaded" from "skipped" easily unless we track initialized state.
+            // But since selectedIds starts empty, we assume on first load we want to select defaults.
+            // However, checking if selectedIds intersects with group options is enough to know if "something" is selected.
+            // If we assume "empty == default needed", then we can't persistent "skip" if we navigate away and back?
+            // For now, simple logic: Pre-select if empty intersection.
+            if group.options.first(where: { selectedIds.contains($0.id) }) == nil {
                 if let defaultOption = group.options.first(where: { $0.isSelected }) {
                     selectedIds.append(defaultOption.id)
                 } else if let first = group.options.first {
-                     // Fallback if no isSelected flag
                      selectedIds.append(first.id)
                 }
             }

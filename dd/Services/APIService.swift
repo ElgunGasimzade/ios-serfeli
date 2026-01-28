@@ -93,8 +93,19 @@ class APIService {
     }
     
     func searchProducts(query: String) async throws -> [Product] {
-        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "\(baseURL)/search?q=\(encodedQuery)") else {
+        var urlString = "\(baseURL)/search?q=\(query)"
+        
+        // Append Location if enabled and available
+        if LocationManager.shared.isLocationEnabled, let loc = LocationManager.shared.location {
+            let lat = loc.coordinate.latitude
+            let lon = loc.coordinate.longitude
+            let range = LocationManager.shared.searchRangeKm
+            
+            urlString += "&lat=\(lat)&lon=\(lon)&range=\(range)"
+        }
+        
+        guard let encodedURL = urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: encodedURL) else {
             throw APIError.invalidURL
         }
         
@@ -383,5 +394,32 @@ class APIService {
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw APIError.serverError
         }
+    }
+    
+    func deletePlan(planId: String) async throws {
+        guard let url = URL(string: "\(baseURL)/plans/\(planId)") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
+    // Stats
+    struct UserStats: Codable {
+        let totalTrips: Int
+        let totalSavings: Double
+    }
+    
+    func getStats(userId: String) async throws -> UserStats {
+        guard let url = URL(string: "\(baseURL)/plans/\(userId)/stats") else { throw APIError.invalidURL }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(UserStats.self, from: data)
     }
 }

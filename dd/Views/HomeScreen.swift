@@ -12,6 +12,7 @@ struct HomeScreen: View {
     @State private var currentPage = 1
     @State private var isLoading = false
     @State private var canLoadMore = true
+    @State private var isSearching = false // Track search loading state
     
     // Sort & Filter State
     @State private var selectedSort: SortOption = .discountPct
@@ -45,9 +46,8 @@ struct HomeScreen: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if let feed = homeFeed {
-                        // Custom Header
-                        HStack(spacing: 12) {
+                    // Custom Header - always show
+                    HStack(spacing: 12) {
                             Image("HeaderLogo")
                                 .resizable()
                                 .renderingMode(.original) // Force original colors
@@ -61,12 +61,40 @@ struct HomeScreen: View {
                         .padding(.horizontal)
                         .padding(.top, 10)
 
-                        // Search Bar
-                        SearchBar(text: $searchQuery)
+                    // Search Bar - always show
+                    SearchBar(text: $searchQuery)
+                        .padding(.horizontal)
+                    
+                    // Check if searching
+                    if !searchQuery.isEmpty {
+                        // SEARCH MODE - independent of home feed
+                        if searchResults.isEmpty {
+                            if searchQuery.count >= 2 {
+                                if isSearching {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.top, 50)
+                                } else {
+                                    Text("No items found".localized)
+                                        .foregroundColor(.gray)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.top, 50)
+                                }
+                            }
+                        } else {
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                                ForEach(searchResults) { product in
+                                    NavigationLink(destination: ProductDetailScreen(product: product)) {
+                                        ProductCard(product: product)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
                             .padding(.horizontal)
-                        
+                        }
+                    } else if let feed = homeFeed {
+                        // HOME FEED MODE
                         // Sort & Filter Bar
-                        if searchQuery.isEmpty {
                             HStack {
                                 // Sort Menu
                                 Menu {
@@ -154,10 +182,9 @@ struct HomeScreen: View {
                             }
                             .padding(.horizontal) // Fix: Add horizontal padding to container so Sort button isn't cut off
                         
-                        if searchQuery.isEmpty {
-                            // Standard Home Feed
-                            
-                            // Hero Section
+                        // Standard Home Feed
+                        
+                        // Hero Section
                             if let hero = feed.hero {
                                 NavigationLink(destination: ProductDetailScreen(product: hero.product)) {
                                     HeroSection(hero: hero)
@@ -198,27 +225,6 @@ struct HomeScreen: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                             }
-                        } else {
-                            // Search Results Mode
-                            if searchResults.isEmpty {
-                                if searchQuery.count >= 2 {
-                                    Text("No items found".localized)
-                                        .foregroundColor(.gray)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.top, 50)
-                                }
-                            } else {
-                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                                    ForEach(searchResults) { product in
-                                        NavigationLink(destination: ProductDetailScreen(product: product)) {
-                                            ProductCard(product: product)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                }
-                                .padding(.horizontal)
-                            }
-                        }
                         
                     } else {
                         ProgressView("Loading...".localized)
@@ -235,6 +241,7 @@ struct HomeScreen: View {
             }
             .task(id: searchQuery) {
                 if searchQuery.count >= 2 {
+                    isSearching = true
                     try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s debounce
                     if Task.isCancelled { return }
                     do {
@@ -242,8 +249,10 @@ struct HomeScreen: View {
                     } catch {
                         print("Search error: \(error)")
                     }
+                    isSearching = false
                 } else {
                     searchResults = []
+                    isSearching = false
                 }
             }
             .alert(isPresented: $showError) {
@@ -252,7 +261,6 @@ struct HomeScreen: View {
                 }))
             }
         }
-    }
     }
     
     func loadStores() async {
@@ -427,7 +435,7 @@ struct ProductCard: View {
             .cornerRadius(12)
             
             Text(product.name).font(.subheadline).lineLimit(1)
-            Text(product.category ?? "").font(.caption).foregroundColor(.gray)
+            Text(product.store ?? "").font(.caption).foregroundColor(.gray)
             
             HStack {
                 VStack(alignment: .leading) {

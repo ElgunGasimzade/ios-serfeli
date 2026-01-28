@@ -8,6 +8,9 @@ class RouteCacheService: ObservableObject {
     // In-memory cache for speed
     @Published var history: [RouteHistoryItem] = []
     
+    // Separate source of truth for stats (since history might be filtered/deleted locally)
+    @Published var lifetimeStats: APIService.UserStats = APIService.UserStats(totalTrips: 0, totalSavings: 0.0)
+    
     // Persist to disk just in case offline, but truth is backend
     private let historyKey = "route_history"
     
@@ -19,13 +22,19 @@ class RouteCacheService: ObservableObject {
         guard let userId = AuthService.shared.userId else { return }
         Task {
             do {
-                let items = try await APIService.shared.getPlans(userId: userId)
+                // Fetch both History and Stats
+                async let fetchedHistory = APIService.shared.getPlans(userId: userId)
+                async let fetchedStats = APIService.shared.getStats(userId: userId)
+                
+                let (items, stats) = try await (fetchedHistory, fetchedStats)
+                
                 DispatchQueue.main.async {
                     self.history = items
+                    self.lifetimeStats = stats // Update stats from backend aggregation
                     self.saveLocalHistory(items)
                 }
             } catch {
-                print("Failed to fetch history: \(error)")
+                print("Failed to fetch history/stats: \(error)")
             }
         }
     }
@@ -91,6 +100,23 @@ class RouteCacheService: ObservableObject {
                 }
             } catch {
                 print("Failed to complete plan: \(error)")
+            }
+        }
+    }
+    
+    func deletePlan(id: String) {
+        guard let index = history.firstIndex(where: { $0.id == id }) else { return }
+        
+        // Remove from local memory
+        history.remove(at: index)
+        saveLocalHistory(history)
+        
+        // Call backend to delete
+        Task {
+            do {
+                try await APIService.shared.deletePlan(planId: id)
+            } catch {
+                print("Failed to delete plan remote: \(error)")
             }
         }
     }
