@@ -2,7 +2,10 @@ import SwiftUI
 
 struct ScanCaptureScreen: View {
     @State private var inputOb = ""
-    @State private var debounceWorkItem: DispatchWorkItem?
+    @State private var searchTask: Task<Void, Never>?
+
+
+    // We reuse DetectedItem as our list model
     
     // We reuse DetectedItem as our list model
     @State private var shoppingListItems: [DetectedItem] = []
@@ -53,6 +56,7 @@ struct ScanCaptureScreen: View {
                             .submitLabel(.done)
                             .onSubmit {
                                 if !inputOb.isEmpty {
+                                    searchTask?.cancel() // Cancel any pending search
                                     addItem(name: inputOb)
                                     inputOb = ""
                                     suggestions = []
@@ -62,6 +66,7 @@ struct ScanCaptureScreen: View {
                             if !inputOb.isEmpty {
                                 // Add Button (Direct add)
                                 Button(action: {
+                                    searchTask?.cancel()
                                     addItem(name: inputOb)
                                     inputOb = ""
                                     suggestions = []
@@ -239,7 +244,7 @@ struct ScanCaptureScreen: View {
     }
     
     private func performSearch(query: String) {
-        debounceWorkItem?.cancel()
+        searchTask?.cancel()
         
         if query.count < 2 {
             withAnimation {
@@ -248,23 +253,25 @@ struct ScanCaptureScreen: View {
             return
         }
         
-        let workItem = DispatchWorkItem {
-            Task {
-                do {
-                    let results = try await APIService.shared.searchKeywords(query: query)
-                    DispatchQueue.main.async {
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            
+            if Task.isCancelled { return }
+            
+            do {
+                let results = try await APIService.shared.searchKeywords(query: query)
+                
+                if !Task.isCancelled {
+                    await MainActor.run {
                         withAnimation {
                             self.suggestions = results
                         }
                     }
-                } catch {
-                    print("Search error: \(error)")
                 }
+            } catch {
+                print("Search error: \(error)")
             }
         }
-        
-        debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
     }
     
     private func addItem(name: String) {

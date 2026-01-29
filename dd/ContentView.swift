@@ -27,7 +27,7 @@ struct ContentView: View {
             
             ScanCaptureScreen()
                 .tabItem {
-                    Label("Scan".localized, systemImage: "barcode.viewfinder")
+                    Label("Shop".localized, systemImage: "magnifyingglass")
                 }
                 .tag(2)
                 
