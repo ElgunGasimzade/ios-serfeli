@@ -1,258 +1,289 @@
 import SwiftUI
 
 struct ScanCaptureScreen: View {
-    @State private var isScanning = true
-    @State private var showResults = false
-    @State private var detectedItems: [DetectedItem] = []
-    @State private var scanPhase = 0.0 // Animation
-    @State private var currentScanId: String? = nil
+    @State private var inputOb = ""
+    @State private var debounceWorkItem: DispatchWorkItem?
+    
+    // We reuse DetectedItem as our list model
+    @State private var shoppingListItems: [DetectedItem] = []
+    
+    @State private var suggestions: [String] = []
+    @State private var isSearching = false
     @State private var navigateToDeals = false
+    @State private var currentScanId: String? = nil
+    
     @EnvironmentObject var localization: LocalizationManager
     
     var body: some View {
         NavigationView {
             ZStack {
-                if isScanning {
-                    CameraPreview()
-                        .ignoresSafeArea()
-                } else {
-                    Color.black.ignoresSafeArea()
-                }
+                Color(UIColor.systemGroupedBackground)
+                    .ignoresSafeArea()
                 
-                // Overlay
-                VStack {
-                    // Top controls?
-                    HStack {
-                        Spacer()
-                        if isScanning {
-                             Text("SCANNING".localized)
-                                .font(.caption).bold()
-                                .padding(8)
-                                .background(Color.red)
-                                .foregroundColor(.white)
-                                .cornerRadius(4)
-                                .padding()
-                        }
+                VStack(spacing: 0) {
+                    // Custom Header
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Create Your List".localized)
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.primary)
+                        Text("Add items to compare prices across stores".localized)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.top, 20)
+                    .padding(.bottom, 10)
                     
-                    Spacer()
-                    
-                    // Framing Box
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 24)
-                            .stroke(Color.white, lineWidth: 2)
-                            .frame(width: 300, height: 400)
-                        
-                        // Scan Line
-                        if isScanning {
-                            Rectangle()
-                                .fill(LinearGradient(colors: [.blue.opacity(0), .blue.opacity(0.5)], startPoint: .top, endPoint: .bottom))
-                                .frame(width: 300, height: 200)
-                                .offset(y: scanPhase - 200) // Start from top
-                                .mask(RoundedRectangle(cornerRadius: 24).frame(width: 300, height: 400))
-                                .onAppear {
-                                    withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
-                                        scanPhase = 400
-                                    }
+                    // Search Bar Section
+                    VStack(spacing: 0) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 18))
+                            
+                            TextField("Search e.g. 'yuyucu toz'".localized, text: Binding(
+                                get: { inputOb },
+                                set: { newValue in
+                                    inputOb = newValue
+                                    performSearch(query: newValue)
                                 }
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Helper Text
-                    Text(isScanning ? "Hold steady. Scanning items...".localized : "Scan Complete!".localized)
-                        .font(.subheadline).bold()
-                        .padding()
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(20)
-                        .foregroundColor(.white)
-                    
-                    Spacer().frame(height: 50)
-                }
-                
-                // Bottom Sheet mechanism
-                if showResults {
-                    VStack {
-                        Spacer()
-                        ResultsSheet(items: $detectedItems) {
-                            Task {
-                                // Confirm items before navigating
-                                if let scanId = currentScanId {
-                                    do {
-                                        _ = try await APIService.shared.confirmScan(scanId: scanId, items: detectedItems)
-                                        // Navigate to deals with scanId
-                                        navigateToDeals = true
-                                    } catch {
-                                        print("Error confirming scan: \(error)")
-                                        // Fallback navigate anyway
-                                        navigateToDeals = true
-                                    }
+                            ))
+                            .font(.system(size: 16))
+                            .submitLabel(.done)
+                            .onSubmit {
+                                if !inputOb.isEmpty {
+                                    addItem(name: inputOb)
+                                    inputOb = ""
+                                    suggestions = []
+                                }
+                            }
+                            
+                            if !inputOb.isEmpty {
+                                // Add Button (Direct add)
+                                Button(action: {
+                                    addItem(name: inputOb)
+                                    inputOb = ""
+                                    suggestions = []
+                                }) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(.blue)
+                                        .font(.system(size: 22))
                                 }
                             }
                         }
-                        .transition(.move(edge: .bottom))
-                    }
-                    .zIndex(1)
-                } else if !isScanning && detectedItems.isEmpty {
-                     // Error state or empty
-                     VStack {
-                        Text("No items detected".localized)
-                            .foregroundColor(.white)
-                        Button("Try Again".localized) {
-                            isScanning = true
-                            scanPhase = 0
+                        .padding(16)
+                        .background(Color.white)
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                        .padding(.horizontal)
+                        .zIndex(2) // Ensure it sits above list
+                        
+                        // Floating Suggestions List
+                        if !suggestions.isEmpty {
+                            VStack(spacing: 0) {
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        ForEach(suggestions, id: \.self) { suggestion in
+                                            Button(action: {
+                                                addItem(name: suggestion)
+                                                inputOb = ""
+                                                suggestions = []
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: "magnifyingglass")
+                                                        .foregroundColor(.gray.opacity(0.5))
+                                                        .font(.system(size: 14))
+                                                    Text(suggestion)
+                                                        .foregroundColor(.primary)
+                                                        .font(.system(size: 16))
+                                                    Spacer()
+                                                    Image(systemName: "plus")
+                                                        .foregroundColor(.blue.opacity(0.8))
+                                                        .font(.system(size: 14, weight: .bold))
+                                                }
+                                                .padding(.vertical, 12)
+                                                .padding(.horizontal, 16)
+                                                .background(Color.white)
+                                            }
+                                            if suggestion != suggestions.last {
+                                                Divider().padding(.leading, 40)
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxHeight: 250) // Limit height
+                            }
+                            .background(Color.white)
+                            .cornerRadius(12)
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                            .padding(.horizontal, 20) // Slightly indented from search bar width
+                            .padding(.top, 4) // Spacing below search bar
+                            .zIndex(3) // Above everything
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                     }
+                    }
+                    .padding(.bottom, 20)
+                    .zIndex(2)
+
+                    // Shopping List
+                    if shoppingListItems.isEmpty {
+                        VStack(spacing: 20) {
+                            Spacer()
+                            Image(systemName: "cart.badge.plus")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 80, height: 80)
+                                .foregroundColor(.gray.opacity(0.2))
+                            Text("Your list is empty".localized)
+                                .font(.headline)
+                                .foregroundColor(.gray)
+                            Text("Start typing to add items".localized)
+                                .font(.subheadline)
+                                .foregroundColor(.gray.opacity(0.8))
+                            Spacer()
+                        }
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                ForEach(shoppingListItems) { item in
+                                    HStack(spacing: 16) {
+                                        // Icon
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color.blue.opacity(0.1))
+                                                .frame(width: 44, height: 44)
+                                            Image(systemName: "bag.fill") // Or dynamic icon based on name?
+                                                .foregroundColor(.blue)
+                                                .font(.system(size: 20))
+                                        }
+                                        
+                                        Text(item.name)
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.primary)
+                                        
+                                        Spacer()
+                                        
+                                        Button(action: {
+                                            withAnimation {
+                                                if let index = shoppingListItems.firstIndex(where: { $0.id == item.id }) {
+                                                    shoppingListItems.remove(at: index)
+                                                }
+                                            }
+                                        }) {
+                                            Image(systemName: "trash")
+                                                .foregroundColor(.red.opacity(0.6))
+                                                .font(.system(size: 18))
+                                                .padding(8)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .background(Color.white)
+                                    .cornerRadius(16)
+                                    .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 1)
+                                    .transition(.scale.combined(with: .opacity))
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 100) // Space for bottom button
+                        }
+                    }
                 }
                 
-                // Navigation Link (Hidden)
-                NavigationLink(destination: BrandSelectionScreen(scanId: currentScanId), isActive: $navigateToDeals) {
+                // Bottom Floating Button
+                VStack {
+                    Spacer()
+                    Button(action: {
+                        Task {
+                            // Generate ID and sync with backend
+                            let newScanId = UUID().uuidString
+                            self.currentScanId = newScanId // Store for binding
+                            
+                            do {
+                                // We use 'confirmScan' to save our manually built list
+                                _ = try await APIService.shared.confirmScan(scanId: newScanId, items: shoppingListItems)
+                                navigateToDeals = true
+                            } catch {
+                                print("Error syncing list: \(error)")
+                                // Navigate anyway? Maybe showing error is better, but fallback is safe.
+                                navigateToDeals = true
+                            }
+                        }
+                    }) {
+                        HStack {
+                            Text("Find Best Deals".localized)
+                                .font(.system(size: 18, weight: .bold))
+                            Image(systemName: "arrow.right.circle.fill")
+                                .font(.system(size: 22))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(shoppingListItems.isEmpty ? Color.gray : Color.blue)
+                        .cornerRadius(20)
+                        .shadow(color: shoppingListItems.isEmpty ? .clear : .blue.opacity(0.4), radius: 10, x: 0, y: 4)
+                    }
+                    .disabled(shoppingListItems.isEmpty)
+                    .padding(.horizontal)
+                    .padding(.bottom)
+                }
+                .zIndex(1)
+                
+                // Hidden Navigation
+                 NavigationLink(destination: BrandSelectionScreen(scanId: currentScanId), isActive: $navigateToDeals) {
                     EmptyView()
                 }
             }
             .navigationBarHidden(true)
-            .task {
-                // Simulate scan delay then fetch
-                if isScanning {
-                    try? await Task.sleep(nanoseconds: 3 * 1_000_000_000) // 3 sec scan
-                    do {
-                        // Pass dummy data, mock service handles it
-                        let response = try await APIService.shared.processScan(imageData: Data())
-                        detectedItems = response.detectedItems
-                        currentScanId = response.scanId
-                        isScanning = false
+        }
+    }
+    
+    private func performSearch(query: String) {
+        debounceWorkItem?.cancel()
+        
+        if query.count < 2 {
+            withAnimation {
+                suggestions = []
+            }
+            return
+        }
+        
+        let workItem = DispatchWorkItem {
+            Task {
+                do {
+                    let results = try await APIService.shared.searchKeywords(query: query)
+                    DispatchQueue.main.async {
                         withAnimation {
-                            showResults = true
-                        }
-                    } catch {
-                        print("Error scanning: \(error)")
-                        isScanning = false
-                        // Show retry UI implemented above
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct ResultsSheet: View {
-    @Binding var items: [DetectedItem]
-    let onFindDeals: () -> Void
-    @State private var isExpanded = true // Simplified for now
-    @State private var showingAddItem = false
-    @State private var newItemName = ""
-    @EnvironmentObject var localization: LocalizationManager
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            // Drag handle
-            Capsule()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 40, height: 5)
-                .padding(.top, 10)
-            
-            HStack {
-                Text("Detected Items".localized).font(.title2).bold()
-                Text("(\(items.count))").font(.title2).bold().foregroundColor(.blue)
-                Spacer()
-                Button(action: { showingAddItem = true }) {
-                    Label("Add Item".localized, systemImage: "plus")
-                }
-            }
-            .padding(.horizontal)
-            .alert("Add Item".localized, isPresented: $showingAddItem) {
-                TextField("Item Name".localized, text: $newItemName)
-                Button("Cancel".localized, role: .cancel) { newItemName = "" }
-                Button("Add".localized) {
-                    if !newItemName.isEmpty {
-                        let newItem = DetectedItem(
-                            id: UUID().uuidString,
-                            name: newItemName,
-                            confidence: 1.0,
-                            boundingBox: nil,
-                            dealAvailable: true, // Optimistic
-                            imageUrl: nil
-                        )
-                        items.append(newItem)
-                        newItemName = ""
-                    }
-                }
-            }
-            
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(items) { item in
-                        DetectedItemRow(item: item) {
-                             if let index = items.firstIndex(where: { $0.id == item.id }) {
-                                 items.remove(at: index)
-                             }
+                            self.suggestions = results
                         }
                     }
+                } catch {
+                    print("Search error: \(error)")
                 }
-                .padding(.horizontal)
             }
-            .frame(maxHeight: 300)
-            
-            Button(action: onFindDeals) {
-                HStack {
-                    Text("Find Best Deals".localized).bold()
-                    Image(systemName: "chevron.right")
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .cornerRadius(12)
-            }
-            .padding()
         }
-        .background(Color.white)
-        .cornerRadius(24)
-        .shadow(radius: 10)
+        
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: workItem)
     }
-}
-
-struct DetectedItemRow: View {
-    let item: DetectedItem
-    let onRemove: () -> Void
     
-    var body: some View {
-        HStack {
-            // Icon or Image
-            if let url = item.imageUrl {
-                AsyncImage(url: URL(string: url)) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.gray.opacity(0.1)
-                }
-                .frame(width: 40, height: 40)
-                .cornerRadius(8)
-                .clipped()
-            } else {
-                Image(systemName: item.dealAvailable ? "checkmark.circle" : "questionmark.circle")
-                    .foregroundColor(item.dealAvailable ? .blue : .gray)
-                    .frame(width: 40, height: 40)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
-            }
-            
-            Text(item.name).font(.body)
-            Spacer()
-            Button(action: onRemove) {
-                Image(systemName: "xmark").foregroundColor(.gray)
-            }
-        }
-        .padding()
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+    private func addItem(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        
+        let newItem = DetectedItem(
+            id: UUID().uuidString,
+            name: trimmed,
+            confidence: 1.0,
+            boundingBox: nil,
+            dealAvailable: true,
+            imageUrl: nil
         )
+        // Avoid duplicates?
+        if !shoppingListItems.contains(where: { $0.name.lowercased() == trimmed.lowercased() }) {
+            withAnimation {
+                shoppingListItems.append(newItem)
+            }
+        }
     }
 }

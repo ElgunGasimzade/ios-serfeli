@@ -117,6 +117,19 @@ class APIService {
         return searchResponse.results
     }
     
+    func searchKeywords(query: String) async throws -> [String] {
+        guard let encodedQuery = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "\(baseURL)/keywords/search?q=\(encodedQuery)") else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode([String].self, from: data)
+    }
+    
     func getBrands(scanId: String? = nil) async throws -> BrandSelectionResponse {
 
         var urlString = "\(baseURL)/deals/brands"
