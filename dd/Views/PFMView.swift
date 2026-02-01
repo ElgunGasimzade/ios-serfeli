@@ -57,12 +57,12 @@ struct PFMView: View {
                                     }
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("Current Focus")
+                                        Text("Current Focus".localized)
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                             .textCase(.uppercase)
                                         
-                                        Text("Active Shopping Plan")
+                                        Text("Active Shopping Plan".localized)
                                             .font(.headline)
                                             .foregroundColor(.primary)
                                             
@@ -75,11 +75,11 @@ struct PFMView: View {
                                     // Savings Badge
                                     let savings = item.route.stops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
                                     VStack(alignment: .trailing) {
-                                        Text("Save \(String(format: "%.2f", savings)) ₼")
+                                        Text("\("Save".localized) \(String(format: "%.2f", savings)) ₼")
                                             .font(.headline)
                                             .fixedSize(horizontal: true, vertical: false) // Prevent truncation
                                             .foregroundColor(.green)
-                                        Text("Estimated")
+                                        Text("Estimated".localized)
                                             .font(.caption2)
                                             .foregroundColor(.gray)
                                     }
@@ -94,7 +94,7 @@ struct PFMView: View {
                                 
                                 NavigationLink(destination: ActiveRouteScreen(routeId: "cached", preloadedRoute: item.route, planId: item.id)) {
                                     HStack {
-                                        Text("Continue Shopping")
+                                        Text("Continue Shopping".localized)
                                             .font(.subheadline)
                                             .bold()
                                         Spacer()
@@ -122,7 +122,7 @@ struct PFMView: View {
                                 Text("\(String(format: "%.2f", routeService.lifetimeStats.totalSavings)) ₼")
                                     .font(.system(size: 24, weight: .bold))
                                     .foregroundColor(.green)
-                                Text("Total Saved")
+                                Text("Total Saved".localized)
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                                     .textCase(.uppercase)
@@ -139,7 +139,7 @@ struct PFMView: View {
                                     Text("\(routeService.lifetimeStats.totalTrips)")
                                         .font(.headline)
                                         .foregroundColor(.primary)
-                                    Text("Trips")
+                                    Text("Trips".localized)
                                         .font(.caption2)
                                         .foregroundColor(.gray)
                                         .textCase(.uppercase)
@@ -153,7 +153,7 @@ struct PFMView: View {
                                     Text("\(routeService.lifetimeStats.totalTrips * 12)") // Mock approximation for now
                                         .font(.headline)
                                         .foregroundColor(.purple)
-                                    Text("Scouted")
+                                    Text("Deals Scouted".localized)
                                         .font(.caption2)
                                         .foregroundColor(.gray)
                                         .textCase(.uppercase)
@@ -171,12 +171,12 @@ struct PFMView: View {
                         if !recentHistory.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
-                                    Text("Recent History")
+                                    Text("Recent History".localized)
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Spacer()
                                     NavigationLink(destination: PlanHistoryScreen()) {
-                                        Text("View All")
+                                        Text("View All".localized)
                                             .font(.subheadline)
                                             .foregroundColor(.blue)
                                     }

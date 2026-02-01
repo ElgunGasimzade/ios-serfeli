@@ -107,11 +107,11 @@ struct BrandSelectionScreen: View {
                         Text("Start Shopping".localized)
                             .font(.headline)
                         if selectedIds.count > 0 {
-                            Text("\(selectedIds.count) item(s) ready (You save \(String(format: "%.2f", totalSavings)) ₼)")
+                            Text("\(selectedIds.count) \("item(s) ready".localized) (\("Save".localized) \(String(format: "%.2f", totalSavings)) ₼)")
                                 .font(.caption)
                                 .opacity(0.9)
                         } else {
-                            Text("Select at least 1 item")
+                            Text("Select at least 1 item".localized)
                                 .font(.caption)
                                 .opacity(0.9)
                         }

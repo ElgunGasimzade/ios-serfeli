@@ -56,14 +56,14 @@ struct HomeScreen: View {
                             Text("Daily Deals".localized)
                                 .font(.largeTitle)
                                 .bold()
-                            Spacer()
                         }
-                        .padding(.horizontal)
+                        .padding(.horizontal, 20)
                         .padding(.top, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     // Search Bar - always show
                     SearchBar(text: $searchQuery)
-                        .padding(.horizontal)
+                        .padding(.horizontal, 20)
                     
                     // Check if searching
                     if !searchQuery.isEmpty {
@@ -90,11 +90,12 @@ struct HomeScreen: View {
                                     .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .padding(.horizontal)
+                            .padding(.horizontal, 20)
                         }
                     } else if let feed = homeFeed {
                         // HOME FEED MODE
-                        // Sort & Filter Bar
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Sort & Filter Bar
                             HStack {
                                 // Sort Menu
                                 Menu {
@@ -136,7 +137,6 @@ struct HomeScreen: View {
                                     .background(selectedSort != .discountPct ? Color.blue.opacity(0.1) : Color(.systemGray6))
                                     .foregroundColor(selectedSort != .discountPct ? .blue : .primary)
                                     .cornerRadius(8)
-                                    // Animation removed
                                 }
                                 
                                 // Filter Menu
@@ -175,12 +175,10 @@ struct HomeScreen: View {
                                     .background(selectedStore != nil ? Color.blue.opacity(0.1) : Color(.systemGray6))
                                     .foregroundColor(selectedStore != nil ? .blue : .primary)
                                     .cornerRadius(8)
-                                    // Animation removed
                                 }
                                 
-                                Spacer()
                             }
-                            .padding(.horizontal) // Fix: Add horizontal padding to container so Sort button isn't cut off
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         
                         // Standard Home Feed
                         
@@ -188,7 +186,6 @@ struct HomeScreen: View {
                             if let hero = feed.hero {
                                 NavigationLink(destination: ProductDetailScreen(product: hero.product)) {
                                     HeroSection(hero: hero)
-                                        .padding(.horizontal)
                                 }
                                 .buttonStyle(PlainButtonStyle())
                             }
@@ -209,7 +206,6 @@ struct HomeScreen: View {
                                     .buttonStyle(PlainButtonStyle())
                                 }
                             }
-                            .padding(.horizontal)
                             
                             // Bottom Loader
                             if isLoading {
@@ -217,14 +213,20 @@ struct HomeScreen: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                             }
+                        }
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity)
                         
                     } else {
                         ProgressView("Loading...".localized)
                             .frame(maxWidth: .infinity, minHeight: 200)
+                            .padding(.horizontal, 20)
                     }
                 }
+                .frame(maxWidth: .infinity)
                 // .padding(.vertical)
             }
+
             .navigationTitle("Daily Deals".localized)
             .navigationBarHidden(true)
             .task {

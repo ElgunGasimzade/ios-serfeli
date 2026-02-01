@@ -59,9 +59,15 @@ struct ProductDetailScreen: View {
                             }
                             Spacer()
                             if let store = product.store {
-                                Button(action: {
-                                    openGoogleMaps(for: store)
-                                }) {
+                                Menu {
+                                    ForEach(MapService.shared.getAvailableApps()) { app in
+                                        Button(action: {
+                                            openMap(app: app, storeName: store)
+                                        }) {
+                                            Label(app.localizedName, systemImage: "arrow.triangle.turn.up.right.circle")
+                                        }
+                                    }
+                                } label: {
                                     Label(store, systemImage: "storefront")
                                         .font(.caption)
                                         .foregroundColor(.blue)
@@ -150,36 +156,18 @@ struct ProductDetailScreen: View {
         }
     }
     
-    func openGoogleMaps(for storeName: String) {
+    func openMap(app: MapApp, storeName: String) {
         Task {
-            // 1. Fetch stores to find coords
             do {
                 let stores = try await APIService.shared.getAvailableStores()
                 if let match = stores.first(where: { $0.name == storeName }),
                    let lat = match.lat, let lon = match.lon {
-                    
-                    // Open Google Maps with Coords
-                    let urlStr = "comgooglemaps://?daddr=\(lat),\(lon)&directionsmode=driving"
-                    if let url = URL(string: urlStr), UIApplication.shared.canOpenURL(url) {
-                        await UIApplication.shared.open(url)
-                    } else {
-                        // Fallback to Browser
-                        let browserUrl = "https://www.google.com/maps/dir/?api=1&destination=\(lat),\(lon)"
-                        if let url = URL(string: browserUrl) {
-                            await UIApplication.shared.open(url)
-                        }
+                    await MainActor.run {
+                         MapService.shared.openMap(app: app, lat: lat, lon: lon, name: storeName)
                     }
                 } else {
-                    // Fallback to searching by name
-                    let query = storeName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                    let urlStr = "comgooglemaps://?q=\(query)"
-                    if let url = URL(string: urlStr), UIApplication.shared.canOpenURL(url) {
-                        await UIApplication.shared.open(url)
-                    } else {
-                         let browserUrl = "https://www.google.com/maps/search/?api=1&query=\(query)"
-                         if let url = URL(string: browserUrl) {
-                             await UIApplication.shared.open(url)
-                         }
+                    await MainActor.run {
+                        MapService.shared.searchMap(app: app, query: storeName)
                     }
                 }
             } catch {
