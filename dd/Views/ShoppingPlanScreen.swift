@@ -67,7 +67,7 @@ struct RouteOptionCard: View {
             headerSection
             
             if let desc = option.description {
-                Text(desc)
+                Text(localizeDescription(desc))
                     .font(.body)
                     .foregroundColor(.gray)
             }
@@ -135,7 +135,7 @@ struct RouteOptionCard: View {
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.gray)
-                Text("Save \(String(format: "%.2f", option.totalSavings)) ₼")
+                Text("\("Save".localized) \(String(format: "%.2f", option.totalSavings)) ₼")
                     .font(.title2)
                     .bold()
             }
@@ -207,7 +207,7 @@ struct RouteOptionCard: View {
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.2)))
             
             VStack(alignment: .leading) {
-                Text(option.stops.first?.store ?? "Store")
+                Text(option.stops.first?.store ?? "Store".localized)
                     .bold()
             }
         }
@@ -228,5 +228,17 @@ struct RouteOptionCard: View {
                 print("Error caching route: \(error)")
             }
         }
+    }
+    
+    private func localizeDescription(_ desc: String) -> String {
+        if desc == "Save more by visiting multiple stores." {
+            return "Save more by visiting multiple stores.".localized
+        } else if desc == "No single store has these items." {
+            return "No single store has these items.".localized
+        } else if desc.hasPrefix("Get everything at ") {
+            let store = String(desc.dropFirst("Get everything at ".count).dropLast(1)) // Remove prefix and trailing dot
+            return "Get everything at".localized + " " + store
+        }
+        return desc.localized
     }
 }

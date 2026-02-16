@@ -2,42 +2,36 @@ import SwiftUI
 
 struct BrandSelectionScreen: View {
     var scanId: String?
+    var preloadedGroups: [BrandGroup]? // Allow manual injection
+    var onCommit: (([String]) -> Void)? // Callback for adding to plan directly
     @State private var response: BrandSelectionResponse?
     @State private var isLoading = true
     @State private var selectedIds: [String] = []
     @EnvironmentObject var localization: LocalizationManager
     @ObservedObject var locationManager = LocationManager.shared // Observe location changes
     
-    // Calculate total savings from selected items
+    // ... (totalSavings computed property remains same)
     var totalSavings: Double {
         guard let groups = response?.groups else { return 0.0 }
         
-        // Use Set to ensure we only count each unique ID once
         let uniqueSelectedIds = Set(selectedIds)
         var total = 0.0
         var countedIds = Set<String>()
         
         for group in groups {
-            // Only count savings from groups that have deals
             guard group.status == "DEAL_FOUND" else { continue }
             for option in group.options {
                 if uniqueSelectedIds.contains(option.id) && !countedIds.contains(option.id) {
-                    // Calculate savings from price difference to ensure accuracy
                     if let original = option.originalPrice, let price = option.price {
                         let itemSavings = original - price
                         if itemSavings > 0 {
                             total += itemSavings
                             countedIds.insert(option.id)
-                            print("DEBUG: Counting \(option.brandName): \(itemSavings)₼ (ID: \(option.id))")
                         }
                     }
                 }
             }
         }
-        
-        print("DEBUG: Total savings: \(total)₼ from \(countedIds.count) unique items")
-        print("DEBUG: Selected IDs count: \(selectedIds.count), Unique: \(uniqueSelectedIds.count)")
-        
         return total
     }
     
@@ -48,41 +42,36 @@ struct BrandSelectionScreen: View {
                     .frame(maxWidth: .infinity, minHeight: 300)
             } else if let groups = response?.groups {
                 ScrollView {
+                    // ... (rest of UI same)
                     VStack(alignment: .leading, spacing: 24) {
-                        // Header info matching HTML
+                        // Header info
                         HStack {
-                            Text("Review Items".localized)
-                                .font(.title3).bold()
+                            Text("Review Items".localized).font(.title3).bold()
                             Spacer()
-                            Text("2/8")
-                                .font(.caption).bold()
-                                .foregroundColor(.green)
-                                .padding(8)
-                                .background(Color.green.opacity(0.1))
-                                .clipShape(Circle())
+                            // Only show count if in scan mode, otherwise just hide or show static?
+                            // For watchlist single item, maybe hide "2/8"?
+                            if scanId != nil {
+                                Text("\(groups.count) " + "Items".localized) 
+                                   .font(.caption).bold()
+                                   .foregroundColor(.green)
+                            }
                         }
                         
-                        Text("Please review the deals we found. You can choose a specific brand or stick with your generic request.".localized)
+                        Text(scanId != nil ? "Please review the deals we found.".localized : "Select the best deal for your item.".localized)
                             .font(.subheadline)
                             .foregroundColor(.gray)
-                        
-                        // Debug/Info: Show if location is active
-                        if locationManager.isLocationEnabled && locationManager.location == nil {
-                             Text("Locating...".localized)
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
 
-                        // Auto-Select Buttons
+                        // ... (auto select buttons same)
+                         // Auto-Select Buttons
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
-                                AutoSelectButton(title: "Cheapest", icon: "tag.fill", color: .green) {
+                                AutoSelectButton(title: "Cheapest".localized, icon: "tag.fill", color: .green) {
                                     autoSelect(strategy: .cheapest)
                                 }
-                                AutoSelectButton(title: "Max Savings", icon: "arrow.down.circle.fill", color: .blue) {
+                                AutoSelectButton(title: "Max Savings".localized, icon: "arrow.down.circle.fill", color: .blue) {
                                     autoSelect(strategy: .maxSavings)
                                 }
-                                AutoSelectButton(title: "Closest", icon: "location.fill", color: .orange) {
+                                AutoSelectButton(title: "Closest".localized, icon: "location.fill", color: .orange) {
                                     autoSelect(strategy: .closest)
                                 }
                             }
@@ -101,54 +90,77 @@ struct BrandSelectionScreen: View {
                 }
                 .background(Color(UIColor.systemGroupedBackground))
                 
-                // Navigation to Plan
-                NavigationLink(destination: ShoppingPlanScreen(selectedIds: selectedIds)) {
-                    VStack(spacing: 4) {
-                        Text("Start Shopping".localized)
-                            .font(.headline)
-                        if selectedIds.count > 0 {
-                            Text("\(selectedIds.count) \("item(s) ready".localized) (\("Save".localized) \(String(format: "%.2f", totalSavings)) ₼)")
-                                .font(.caption)
-                                .opacity(0.9)
-                        } else {
-                            Text("Select at least 1 item".localized)
-                                .font(.caption)
-                                .opacity(0.9)
+                if let onCommit = onCommit {
+                    Button(action: {
+                        onCommit(selectedIds)
+                    }) {
+                        VStack(spacing: 4) {
+                            Text("Add to List".localized)
+                                .font(.headline)
+                            if selectedIds.count > 0 {
+                                Text("\(selectedIds.count) \("item(s)".localized) • \("Save".localized) \(String(format: "%.2f", totalSavings)) ₼")
+                                    .font(.caption)
+                                    .opacity(0.9)
+                            } else {
+                                Text("Select an item".localized)
+                                    .font(.caption)
+                                    .opacity(0.9)
+                            }
                         }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(selectedIds.isEmpty ? Color.gray : Color.blue)
+                        .cornerRadius(12)
+                        .padding()
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(selectedIds.isEmpty ? Color.gray : Color.green)
-                    .cornerRadius(12)
-                    .padding()
+                    .disabled(selectedIds.isEmpty)
+                } else {
+                    NavigationLink(destination: ShoppingPlanScreen(selectedIds: selectedIds)) {
+                        VStack(spacing: 4) {
+                            Text("Start Shopping".localized)
+                                .font(.headline)
+                            if selectedIds.count > 0 {
+                                Text("\(selectedIds.count) \("item(s) ready".localized) (\("Save".localized) \(String(format: "%.2f", totalSavings)) ₼)")
+                                    .font(.caption)
+                                    .opacity(0.9)
+                            } else {
+                                Text("Select at least 1 item".localized)
+                                    .font(.caption)
+                                    .opacity(0.9)
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(selectedIds.isEmpty ? Color.gray : Color.green)
+                        .cornerRadius(12)
+                        .padding()
+                    }
+                    .disabled(selectedIds.isEmpty)
                 }
-                .disabled(selectedIds.isEmpty)
             } else {
                  Text("No deals found".localized)
             }
         }
-        .navigationTitle("Review Items".localized)
+
         .task {
             await loadData()
         }
-        // Re-fetch when location arrives (fixing the "first load no location" bug)
         .onChange(of: locationManager.location) { newLoc in
-            if newLoc != nil {
-                Task {
-                    // Only reload if we haven't already loaded "with distance"? 
-                    // Or just simple reload to be safe.
-                    // To avoid loops, maybe check if we already have distance data? 
-                    // But re-fetching is safer and cheap enough here.
-                    await loadData()
-                }
+            if newLoc != nil && scanId != nil { // Only reload on location if scanning? Or always?
+                Task { await loadData() }
             }
         }
     }
     
-    // Extracted fetch logic
     private func loadData() async {
-        // If already loading and not first load? No, simplest is just overwrite.
+        if let preloaded = preloadedGroups {
+            self.response = BrandSelectionResponse(groups: preloaded)
+            self.isLoading = false
+            return
+        }
+        
         do {
             response = try await APIService.shared.getBrands(scanId: scanId)
         } catch {
@@ -331,7 +343,7 @@ struct DealFoundCard: View {
                         }
                     }) {
                         HStack {
-                            Text(isExpanded ? "Show Less" : "See \(group.options.count - 1) More Options")
+                            Text(isExpanded ? "Show Less".localized : String(format: "See %d More Options".localized, group.options.count - 1))
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -442,7 +454,7 @@ struct BrandOptionRow: View {
                 
                 // Badge moved here
                 if let badge = option.badge {
-                    Text(badge.uppercased())
+                    Text(badge.localized.uppercased())
                         .font(.system(size: 8, weight: .bold))
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
@@ -465,7 +477,7 @@ struct BrandOptionRow: View {
                         .bold()
                     
                     if option.savings > 0.01 {
-                        Text("SAVE \(String(format: "%.2f", option.savings)) ₼")
+                        Text("Save".localized.uppercased() + " \(String(format: "%.2f", option.savings)) ₼")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundColor(.white)
                             .padding(.horizontal, 4)

@@ -71,9 +71,11 @@ struct ScanCaptureScreen: View {
                                     inputOb = ""
                                     suggestions = []
                                 }) {
-                                    Image(systemName: "plus.circle.fill")
+                                    Text("Add".localized)
+                                        .font(.system(size: 16, weight: .bold))
                                         .foregroundColor(.blue)
-                                        .font(.system(size: 22))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
                                 }
                             }
                         }
@@ -89,11 +91,11 @@ struct ScanCaptureScreen: View {
                             VStack(spacing: 0) {
                                 ScrollView {
                                     VStack(alignment: .leading, spacing: 0) {
-                                        ForEach(suggestions, id: \.self) { suggestion in
+                                        ForEach(suggestions.prefix(5), id: \.self) { suggestion in
                                             Button(action: {
-                                                addItem(name: suggestion)
-                                                inputOb = ""
+                                                inputOb = suggestion
                                                 suggestions = []
+                                                // User must press Add or Enter
                                             }) {
                                                 HStack {
                                                     Image(systemName: "magnifyingglass")
@@ -103,15 +105,15 @@ struct ScanCaptureScreen: View {
                                                         .foregroundColor(.primary)
                                                         .font(.system(size: 16))
                                                     Spacer()
-                                                    Image(systemName: "plus")
-                                                        .foregroundColor(.blue.opacity(0.8))
-                                                        .font(.system(size: 14, weight: .bold))
+                                                    Image(systemName: "arrow.up.left")
+                                                        .foregroundColor(.gray.opacity(0.5))
+                                                        .font(.system(size: 14))
                                                 }
                                                 .padding(.vertical, 12)
                                                 .padding(.horizontal, 16)
                                                 .background(Color.white)
                                             }
-                                            if suggestion != suggestions.last {
+                                            if suggestion != suggestions.last && suggestion != suggestions.prefix(5).last {
                                                 Divider().padding(.leading, 40)
                                             }
                                         }

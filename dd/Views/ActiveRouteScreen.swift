@@ -87,7 +87,7 @@ struct ActiveRouteScreen: View {
                             
                             VStack(spacing: 24) {
                                 ForEach(stops) { stop in
-                                    StopCard(stop: stop, checkedItems: $checkedItems)
+                                    StopCard(stop: stop, checkedItems: $checkedItems, planId: planId)
                                 }
                             }
                             .padding()
@@ -173,8 +173,12 @@ struct ActiveRouteScreen: View {
             if routeId == "history" && planId == nil, let loadedRoute = self.route {
                 let allIds = loadedRoute.stops.flatMap { $0.items }.map { $0.id }
                 self.checkedItems = Set(allIds)
+            } else if let loadedRoute = self.route {
+                // If it's an active plan, load checked state from the items themselves
+                let checkedIds = loadedRoute.stops.flatMap { $0.items }.filter { $0.checked }.map { $0.id }
+                self.checkedItems = Set(checkedIds)
             }
-    }
+        }
     } // Close body
     
     // Environment wrapper for dismissing
@@ -184,6 +188,8 @@ struct ActiveRouteScreen: View {
 struct StopCard: View {
     let stop: RouteStore
     @Binding var checkedItems: Set<String>
+    var planId: String? // Added planId
+    
     @EnvironmentObject var localization: LocalizationManager
     
     var body: some View {
@@ -224,7 +230,7 @@ struct StopCard: View {
                     }
                 } label: {
                     Label("Navigate".localized, systemImage: "location.fill")
-                        .font(.caption).bold()
+                    .font(.caption).bold()
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(Color.blue.opacity(0.1))
@@ -243,10 +249,18 @@ struct StopCard: View {
                     VStack(spacing: 0) {
                         HStack(alignment: .top, spacing: 12) {
                             Button(action: {
+                                var isNowChecked = false
                                 if checkedItems.contains(item.id) {
                                     checkedItems.remove(item.id)
+                                    isNowChecked = false
                                 } else {
                                     checkedItems.insert(item.id)
+                                    isNowChecked = true
+                                }
+                                
+                                // Update Persistence
+                                if let validPlanId = self.planId {
+                                     RouteCacheService.shared.updateItemCheckState(planId: validPlanId, itemId: item.id, isChecked: isNowChecked)
                                 }
                             }) {
                                 Image(systemName: checkedItems.contains(item.id) ? "checkmark.square.fill" : "square")
@@ -261,7 +275,7 @@ struct StopCard: View {
                                     .foregroundColor(checkedItems.contains(item.id) ? .gray : .primary)
                                     .strikethrough(checkedItems.contains(item.id))
                                 
-                                Text("\(item.aisle) • \(String(format: "%.2f", item.price)) ₼")
+                                Text("\((item.aisle == "General" ? "General".localized : item.aisle)) • \(String(format: "%.2f", item.price)) ₼")
                                     .font(.caption)
                                     .foregroundColor(.gray)
                             }

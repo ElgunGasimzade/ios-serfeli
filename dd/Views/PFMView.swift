@@ -3,6 +3,8 @@ import SwiftUI
 struct PFMView: View {
     @ObservedObject var routeService = RouteCacheService.shared
     @EnvironmentObject var localization: LocalizationManager
+    @State private var navigateToActiveTrip = false
+    @State private var activePlanId: String?
     
     // Derived Active Route (Most Recent Active)
     private var featuredActivePlan: RouteHistoryItem? {
@@ -40,7 +42,15 @@ struct PFMView: View {
                  .background(Color.white)
                  
                  ScrollView {
-                     VStack(spacing: 16) {
+                     // Hidden Navigation Link for programmatic navigation
+                     NavigationLink(
+                         destination: activeRouteDestination,
+                         isActive: $navigateToActiveTrip
+                     ) {
+                         EmptyView()
+                     }
+                     
+                     VStack(spacing: 10) { // Reduced spacing from 16 to 10
                          
                         // 1. ACTIVE PLAN (Most Recent Active)
                         if let item = featuredActivePlan {
@@ -66,7 +76,7 @@ struct PFMView: View {
                                             .font(.headline)
                                             .foregroundColor(.primary)
                                             
-                                        Text("\(item.route.stops.count) Stores • \(item.route.estTime)")
+                                        Text("\(item.route.stops.count) \("Stores".localized) • \(item.route.estTime.replacingOccurrences(of: "mins", with: "min".localized).replacingOccurrences(of: "min", with: "min".localized))")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
@@ -199,6 +209,15 @@ struct PFMView: View {
              }
              .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToPFM"))) { _ in
                  routeService.refreshHistory()
+                 
+                 // Auto-navigate to Active Trip if available
+                 // We add a small delay to ensure TabView switch completes first
+                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                     if let active = featuredActivePlan {
+                         self.activePlanId = active.id
+                         self.navigateToActiveTrip = true
+                     }
+                 }
              }
         }
     }
@@ -210,6 +229,14 @@ struct PFMView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+    
+    private var activeRouteDestination: some View {
+        if let item = featuredActivePlan {
+            return AnyView(ActiveRouteScreen(routeId: "cached", preloadedRoute: item.route, planId: item.id))
+        } else {
+            return AnyView(Text("Loading..."))
+        }
     }
 }
 
@@ -250,9 +277,9 @@ struct HistoryCard: View {
             
             HStack {
                 VStack(alignment: .leading) {
-                    Text("\(item.route.stops.count) Stores")
+                    Text("\(item.route.stops.count) \("Stores".localized)")
                         .font(.headline)
-                    Text(item.route.estTime)
+                    Text(item.route.estTime.replacingOccurrences(of: "mins", with: "min".localized).replacingOccurrences(of: "min", with: "min".localized))
                         .font(.caption)
                         .foregroundColor(.gray)
                 }
@@ -261,7 +288,7 @@ struct HistoryCard: View {
                 
                 VStack(alignment: .trailing) {
                     let savings = item.route.stops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
-                    Text("Saved \(String(format: "%.2f", Double(savings))) ₼")
+                    Text("\("Saved".localized) \(String(format: "%.2f", Double(savings))) ₼")
                         .font(.headline)
                         .foregroundColor(.green)
                 }

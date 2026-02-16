@@ -35,7 +35,7 @@ struct ProductDetailScreen: View {
                         .background(Color.white)
                         
                         if let discount = product.discountPercent, discount > 0 {
-                            Text("-\(discount)%")
+                            Text(String(format: "off_percent_format".localized, discount))
                                 .font(.headline)
                                 .bold()
                                 .padding(.horizontal, 12)
@@ -118,7 +118,7 @@ struct ProductDetailScreen: View {
                             await RouteCacheService.shared.refreshHistory()
                             showSuccessAlert = true
                         } catch {
-                            errorMessage = "Failed to add item to list: \(error.localizedDescription)"
+                            errorMessage = "\("Failed to add item to list".localized): \(error.localizedDescription)"
                             showErrorAlert = true
                         }
                     }

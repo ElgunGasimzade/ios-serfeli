@@ -70,10 +70,10 @@ struct ProfileScreen: View {
                      // Profile Edit Section
                      Section(header: Text("Personal Info".localized)) {
                          if isEditing {
-                             TextField("Email", text: $editEmail)
+                             TextField("Email".localized, text: $editEmail)
                                  .keyboardType(.emailAddress)
                                  .autocapitalization(.none)
-                             TextField("Phone Number", text: $editPhone)
+                             TextField("Phone Number".localized, text: $editPhone)
                                  .keyboardType(.phonePad)
                              
                              if let error = errorMessage {
@@ -116,12 +116,12 @@ struct ProfileScreen: View {
                          .pickerStyle(SegmentedPickerStyle())
                      }
                      
-                     Section(header: Text("Location Settings")) {
-                         Toggle("Enable Location", isOn: $locationManager.isLocationEnabled)
+                     Section(header: Text("Location Settings".localized)) {
+                         Toggle("Enable Location".localized, isOn: $locationManager.isLocationEnabled)
                          
                          if locationManager.isLocationEnabled {
                              VStack(alignment: .leading) {
-                                 Text("Search Range: \(Int(locationManager.searchRangeKm)) km")
+                                 Text("Search Range".localized + ": \(Int(locationManager.searchRangeKm)) km")
                                  Slider(value: $locationManager.searchRangeKm, in: 1...20, step: 1)
                              }
                          }
@@ -133,8 +133,8 @@ struct ProfileScreen: View {
              }
              .navigationTitle("Profile".localized)
              // Username Edit Alert
-             .alert("Edit Username", isPresented: $isEditingUsername) {
-                 TextField("Username", text: $editUsernameText)
+             .alert("Edit Username".localized, isPresented: $isEditingUsername) {
+                 TextField("Username".localized, text: $editUsernameText)
                  Button("Save") {
                      authService.updateProfile(email: nil, phone: nil, username: editUsernameText)
                  }
@@ -160,12 +160,12 @@ struct ProfileScreen: View {
     
     private func saveProfile() {
         guard isValidEmail(editEmail) else {
-            errorMessage = "Invalid email format"
+            errorMessage = "Invalid email format".localized
             return
         }
         
         guard authService.userId != nil else {
-            errorMessage = "User not found. Try restarting app."
+            errorMessage = "User not found. Try restarting app.".localized
             return
         }
         

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MapSelectionSheet: View {
     @Binding var isPresented: Bool
+    let storeName: String
     let apps: [MapApp]
     let onSelect: (MapApp) -> Void
     
@@ -26,7 +27,7 @@ struct MapSelectionSheet: View {
                         .frame(width: 40, height: 5)
                         .padding(.top, 10)
                     
-                    Text("Directions".localized)
+                    Text("Navigate to".localized + " \(storeName)")
                         .font(.headline)
                         .padding(.bottom, 5)
                     

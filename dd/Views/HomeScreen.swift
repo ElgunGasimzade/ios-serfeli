@@ -32,11 +32,11 @@ struct HomeScreen: View {
         
         var displayName: String {
             switch self {
-            case .discountPct: return "Best Discount"
-            case .priceAsc: return "Price: Low to High"
-            case .priceDesc: return "Price: High to Low"
-            case .discountVal: return "Max Savings"
-            case .marketName: return "Store Name"
+            case .discountPct: return "Best Discount".localized
+            case .priceAsc: return "Price: Low to High".localized
+            case .priceDesc: return "Price: High to Low".localized
+            case .discountVal: return "Max Savings".localized
+            case .marketName: return "Store Name".localized
             }
         }
     }
@@ -94,7 +94,7 @@ struct HomeScreen: View {
                         }
                     } else if let feed = homeFeed {
                         // HOME FEED MODE
-                        VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 8) { // Reduced from 16 to 8
                             // Sort & Filter Bar
                             HStack {
                                 // Sort Menu
@@ -128,7 +128,6 @@ struct HomeScreen: View {
                                         .frame(width: 20)
                                         
                                         Text(selectedSort == .discountPct ? "Sort".localized : selectedSort.displayName)
-                                            .lineLimit(1)
                                             .id(selectedSort) // Optimize transition
                                     }
                                     .font(.subheadline)
@@ -166,7 +165,6 @@ struct HomeScreen: View {
                                     HStack {
                                         Image(systemName: "line.3.horizontal.decrease.circle")
                                         Text(selectedStore ?? "All Stores".localized)
-                                            .fixedSize() 
                                             .id(selectedStore)
                                     }
                                     .font(.subheadline)
@@ -239,7 +237,8 @@ struct HomeScreen: View {
                     try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s debounce
                     if Task.isCancelled { return }
                     do {
-                        searchResults = try await APIService.shared.searchProducts(query: searchQuery)
+                        let (results, _) = try await APIService.shared.searchProducts(query: searchQuery)
+                        searchResults = results
                     } catch {
                         print("Search error: \(error)")
                     }
@@ -320,21 +319,7 @@ struct HomeScreen: View {
 
 // MARK: - Subviews
 
-struct SearchBar: View {
-    @Binding var text: String
-    @EnvironmentObject var localization: LocalizationManager
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.gray)
-            TextField("Search products...".localized, text: $text)
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-}
+
 
 struct HeroSection: View {
     let hero: Hero
@@ -359,8 +344,16 @@ struct HeroSection: View {
                 .clipped()
                 .cornerRadius(16)
                 
-                if let badge = hero.product.badge {
-                    Text(badge)
+                if let discount = hero.product.discountPercent, discount > 0 {
+                    Text(String(format: "off_percent_format".localized, discount))
+                        .font(.caption).bold()
+                        .padding(6)
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(4)
+                        .padding(12)
+                } else if let badge = hero.product.badge {
+                    Text(badge.localized)
                         .font(.caption).bold()
                         .padding(6)
                         .background(Color.red)
@@ -411,49 +404,5 @@ struct CategoryPill: View {
     }
 }
 
-struct ProductCard: View {
-    let product: Product
-    
-    var body: some View {
-        VStack(alignment: .leading) {
-            AsyncImage(url: URL(string: product.imageUrl)) { phase in
-                if let image = phase.image {
-                    image.resizable().scaledToFit()
-                } else {
-                    Color.gray.opacity(0.1)
-                }
-            }
-            .frame(height: 120)
-            .frame(maxWidth: .infinity)
-            .background(Color.gray.opacity(0.05))
-            .cornerRadius(12)
-            
-            Text(product.name).font(.subheadline).lineLimit(1)
-            Text(product.store ?? "").font(.caption).foregroundColor(.gray)
-            
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("\(String(format: "%.2f", product.price)) ₼").bold()
-                    if let original = product.originalPrice {
-                        Text("\(String(format: "%.2f", original)) ₼")
-                            .font(.caption2).strikethrough().foregroundColor(.gray)
-                    }
-                }
-                Spacer()
-                if let discount = product.discountPercent {
-                    Text("-\(discount)%")
-                        .font(.caption).bold()
-                        .padding(4)
-                        .background(Color.blue.opacity(0.1))
-                        .foregroundColor(.blue)
-                        .cornerRadius(4)
-                }
-            }
-        }
-        .padding(10)
-        .background(Color.white)
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.05), radius: 3)
-    }
-}
+
 

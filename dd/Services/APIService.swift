@@ -92,7 +92,7 @@ class APIService {
         }
     }
     
-    func searchProducts(query: String) async throws -> [Product] {
+    func searchProducts(query: String) async throws -> (products: [Product], count: Int) {
         var urlString = "\(baseURL)/search?q=\(query)"
         
         // Append Location if enabled and available
@@ -114,7 +114,7 @@ class APIService {
             throw APIError.serverError
         }
         let searchResponse = try JSONDecoder().decode(SearchResponse.self, from: data)
-        return searchResponse.results
+        return (searchResponse.results, searchResponse.count)
     }
     
     func searchKeywords(query: String) async throws -> [String] {

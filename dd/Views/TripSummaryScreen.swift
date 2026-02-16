@@ -31,7 +31,7 @@ struct TripSummaryScreen: View {
                             .font(.system(size: 56, weight: .bold))
                             .foregroundColor(.green)
                         
-                        Text("You spent".localized + " \(response?.timeSpent ?? "--") " + "shopping.".localized)
+                        Text("You spent".localized + " \( (response?.timeSpent ?? "--").replacingOccurrences(of: "mins", with: "min".localized).replacingOccurrences(of: "min", with: "min".localized) ) " + "shopping.".localized)
                             .font(.subheadline)
                             .foregroundColor(.gray)
                     }

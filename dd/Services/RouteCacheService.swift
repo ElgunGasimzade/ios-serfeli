@@ -13,9 +13,11 @@ class RouteCacheService: ObservableObject {
     
     // Persist to disk just in case offline, but truth is backend
     private let historyKey = "route_history"
+    private let checkedItemsKey = "checked_items_persistence"
     
     private init() {
         loadLocalHistory()
+        loadLocalStats()
     }
     
     func refreshHistory() {
@@ -28,10 +30,41 @@ class RouteCacheService: ObservableObject {
                 
                 let (items, stats) = try await (fetchedHistory, fetchedStats)
                 
+                // Merge with local checked state
+                let mergedItems = items.map { plan -> RouteHistoryItem in
+                    var mutablePlan = plan
+                    let checkedIds = self.getCheckedItems(planId: plan.id)
+                    
+                    if !checkedIds.isEmpty {
+                        var newRoute = plan.route
+                        newRoute.stops = plan.route.stops.map { stop in
+                            var newStop = stop
+                            newStop.items = stop.items.map { item in
+                                var newItem = item
+                                if checkedIds.contains(item.id) {
+                                    newItem = RouteItem(
+                                        id: item.id,
+                                        name: item.name,
+                                        aisle: item.aisle,
+                                        price: item.price,
+                                        savings: item.savings,
+                                        checked: true
+                                    )
+                                }
+                                return newItem
+                            }
+                            return newStop
+                        }
+                        mutablePlan.route = newRoute
+                    }
+                    return mutablePlan
+                }
+                
                 DispatchQueue.main.async {
-                    self.history = items
+                    self.history = mergedItems
                     self.lifetimeStats = stats // Update stats from backend aggregation
-                    self.saveLocalHistory(items)
+                    self.saveLocalHistory(mergedItems)
+                    self.saveLocalStats(stats)
                 }
             } catch {
                 print("Failed to fetch history/stats: \(error)")
@@ -88,6 +121,9 @@ class RouteCacheService: ObservableObject {
         let newTotalSavings = newStops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
         finalRoute.totalSavings = newTotalSavings
         
+        // Clear checked items for this plan as it is now complete
+        removeCheckedItems(planId: id)
+        
         Task {
             do {
                 try await APIService.shared.completePlan(planId: activeItem.id, finalRoute: finalRoute)
@@ -104,12 +140,64 @@ class RouteCacheService: ObservableObject {
         }
     }
     
+    func updateItemCheckState(planId: String, itemId: String, isChecked: Bool) {
+        // Find the index of the plan
+        guard let index = history.firstIndex(where: { $0.id == planId }) else { return }
+        
+        var plan = history[index]
+        var route = plan.route
+        
+        // Update stops -> items
+        var newStops: [RouteStore] = []
+        for stop in route.stops {
+            var newStop = stop
+            var newItems: [RouteItem] = []
+            
+            for item in stop.items {
+                if item.id == itemId {
+                    // Create new item with updated checked status
+                    let newItem = RouteItem(
+                        id: item.id,
+                        name: item.name,
+                        aisle: item.aisle,
+                        price: item.price,
+                        savings: item.savings,
+                        checked: isChecked
+                    )
+                    newItems.append(newItem)
+                } else {
+                    newItems.append(item)
+                }
+            }
+            newStop.items = newItems
+            newStops.append(newStop)
+        }
+        
+        route.stops = newStops
+        plan.route = route
+        
+        // Update history
+        history[index] = plan
+        // Don't save entire history effectively here, rely on `saveCheckedItems` for persistence of this state
+        // saveLocalHistory(history) // We can still save it, but refresh will overwrite.
+        
+        // Save to separate persistence
+        var currentChecked = getCheckedItems(planId: planId)
+        if isChecked {
+            currentChecked.insert(itemId)
+        } else {
+            currentChecked.remove(itemId)
+        }
+        saveCheckedItems(planId: planId, items: currentChecked)
+    }
+    
     func deletePlan(id: String) {
         guard let index = history.firstIndex(where: { $0.id == id }) else { return }
         
         // Remove from local memory
         history.remove(at: index)
         saveLocalHistory(history)
+        removeCheckedItems(planId: id)
         
         // Call backend to delete
         Task {
@@ -131,6 +219,40 @@ class RouteCacheService: ObservableObject {
     private func saveLocalHistory(_ items: [RouteHistoryItem]) {
         if let data = try? JSONEncoder().encode(items) {
             UserDefaults.standard.set(data, forKey: historyKey)
+        }
+    }
+    
+    // MARK: - Checked Items Persistence
+    private func getCheckedItems(planId: String) -> Set<String> {
+        let dict = UserDefaults.standard.dictionary(forKey: checkedItemsKey) as? [String: [String]] ?? [:]
+        return Set(dict[planId] ?? [])
+    }
+    
+    private func saveCheckedItems(planId: String, items: Set<String>) {
+        var dict = UserDefaults.standard.dictionary(forKey: checkedItemsKey) as? [String: [String]] ?? [:]
+        dict[planId] = Array(items)
+        UserDefaults.standard.set(dict, forKey: checkedItemsKey)
+    }
+    
+    private func removeCheckedItems(planId: String) {
+        var dict = UserDefaults.standard.dictionary(forKey: checkedItemsKey) as? [String: [String]] ?? [:]
+        dict.removeValue(forKey: planId)
+        UserDefaults.standard.set(dict, forKey: checkedItemsKey)
+    }
+
+    // MARK: - Stats Persistence
+    private let statsKey = "user_stats_persistence"
+
+    private func saveLocalStats(_ stats: APIService.UserStats) {
+        if let data = try? JSONEncoder().encode(stats) {
+            UserDefaults.standard.set(data, forKey: statsKey)
+        }
+    }
+
+    private func loadLocalStats() {
+        if let data = UserDefaults.standard.data(forKey: statsKey),
+           let stats = try? JSONDecoder().decode(APIService.UserStats.self, from: data) {
+            self.lifetimeStats = stats
         }
     }
 }
