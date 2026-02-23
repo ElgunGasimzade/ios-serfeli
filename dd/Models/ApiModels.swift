@@ -169,7 +169,7 @@ struct TripSummary: Codable {
 
 // MARK: - Watchlist
 struct WatchlistResponse: Codable {
-    let items: [WatchlistItem]
+    var items: [WatchlistItem]
     let popularEssentials: [String]
 }
 
