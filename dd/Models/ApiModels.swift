@@ -1,9 +1,8 @@
 import Foundation
 
-// MARK: - API Constants
+// API Configuration
 struct APIConstants {
      static let baseURL = "https://newbackjs.onrender.com/api/v1"
-//    static let baseURL = "http://localhost:8080/api/v1"
 }
 
 // MARK: - Auth
@@ -177,10 +176,10 @@ struct WatchlistResponse: Codable {
 struct WatchlistItem: Codable, Identifiable {
     let id: String
     let name: String
-    let status: String
-    let subtitle: String
-    let badge: String?
-    let iconType: String
+    var status: String
+    var subtitle: String
+    var badge: String?
+    var iconType: String
 }
 
 struct TripSummaryResponse: Codable {
@@ -205,3 +204,83 @@ struct StoreLocation: Codable, Identifiable, Hashable {
     let lat: Double?
     let lon: Double?
 }
+
+// MARK: - Family Models
+
+struct Family: Codable, Identifiable {
+    let id: String
+    let name: String
+    let inviteCode: String
+    let createdAt: String
+}
+
+struct FamilyMember: Codable, Identifiable {
+    let id: String
+    let username: String
+    let email: String?
+    let role: String
+    let joinedAt: String
+}
+
+struct FamilyResponse: Codable {
+    let family: Family?
+    let role: String?
+    let members: [FamilyMember]?
+}
+
+struct FamilyShoppingItem: Codable, Identifiable {
+    let id: String
+    let itemName: String
+    let quantity: Int
+    let status: String // "pending" or "purchased"
+    let notes: String?
+    let brandName: String?
+    let storeName: String?
+    let listId: Int?
+    let price: Double?
+    let originalPrice: Double?
+    let productId: String?
+    let addedBy: ItemUser
+    let purchasedBy: ItemUser?
+    let purchasedAt: String?
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct ItemUser: Codable {
+    let id: String
+    let username: String
+}
+
+struct FamilyShoppingListResponse: Codable {
+    let items: [FamilyShoppingItem]
+}
+
+struct ShoppingList: Codable, Identifiable {
+    let id: Int
+    let name: String
+    let createdAt: String
+    let pendingCount: Int
+    let totalCount: Int
+}
+
+struct ShoppingListsResponse: Codable {
+    let lists: [ShoppingList]
+}
+
+// MARK: - Family List Models
+
+struct FamilyListItem: Codable, Identifiable {
+    let id: String
+    let name: String
+    let inviteCode: String
+    let role: String
+    let createdAt: String
+    let memberCount: Int
+    let pendingItemsCount: Int
+}
+
+struct FamilyListResponse: Codable {
+    let families: [FamilyListItem]
+}
+

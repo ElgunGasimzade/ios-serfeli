@@ -6,6 +6,7 @@ struct BrandSelectionScreen: View {
     var onCommit: (([String]) -> Void)? // Callback for adding to plan directly
     @State private var response: BrandSelectionResponse?
     @State private var isLoading = true
+    @State private var customBrands: [String: String] = [:] // Map Group.itemName -> Custom Brand Text
     @State private var selectedIds: [String] = []
     @EnvironmentObject var localization: LocalizationManager
     @ObservedObject var locationManager = LocationManager.shared // Observe location changes
@@ -79,10 +80,12 @@ struct BrandSelectionScreen: View {
                         }
                         
                         ForEach(groups) { group in
-                            if group.status == "DEAL_FOUND" {
-                                DealFoundCard(group: group, selectedIds: $selectedIds)
-                            } else {
-                                NoDealFoundCard(group: group)
+                            VStack(spacing: 0) {
+                                if group.status == "DEAL_FOUND" {
+                                    DealFoundCard(group: group, selectedIds: $selectedIds, customBrands: $customBrands)
+                                } else {
+                                    NoDealFoundCard(group: group, customBrands: $customBrands)
+                                }
                             }
                         }
                     }
@@ -90,8 +93,36 @@ struct BrandSelectionScreen: View {
                 }
                 .background(Color(UIColor.systemGroupedBackground))
                 
+                // Logic for "Unselected" items
+                // If an item has NO selected ID, we check if it has a custom brand.
+                // If neither, we assume "Generic" (just item name) IF the user proceeds.
+                
+                // Helper to gather all "Names" (Generic + Custom) for items without IDs
+                var extraItems: [String] {
+                    var items: [String] = []
+                    for group in groups {
+                        // Check if ANY option in this group is selected
+                        let isSelected = group.options.contains { selectedIds.contains($0.id) }
+                        
+                        if !isSelected {
+                            // If not selected, check for custom brand
+                            if let custom = customBrands[group.itemName], !custom.isEmpty {
+                                if custom != "[SKIPPED]" {
+                                    items.append("\(group.itemName) (\(custom))")
+                                }
+                            } else if group.status != "DEAL_FOUND" && customBrands[group.itemName] != "[SKIPPED]" {
+                                items.append(group.itemName)
+                            }
+                        }
+                    }
+                    return items
+                }
+
                 if let onCommit = onCommit {
                     Button(action: {
+                        // The onCommit closure expects [String] (selectedIds)
+                        // If we need to pass generic items, the signature of onCommit needs to change.
+                        // For now, we adhere to the existing signature.
                         onCommit(selectedIds)
                     }) {
                         VStack(spacing: 4) {
@@ -116,16 +147,19 @@ struct BrandSelectionScreen: View {
                     }
                     .disabled(selectedIds.isEmpty)
                 } else {
-                    NavigationLink(destination: ShoppingPlanScreen(selectedIds: selectedIds)) {
+                    // SHOP FLOW (NavigationLink)
+                    NavigationLink(destination: ShoppingPlanScreen(selectedIds: selectedIds, items: extraItems)) {
                         VStack(spacing: 4) {
                             Text("Start Shopping".localized)
                                 .font(.headline)
-                            if selectedIds.count > 0 {
-                                Text("\(selectedIds.count) \("item(s) ready".localized) (\("Save".localized) \(String(format: "%.2f", totalSavings)) ₼)")
+                            
+                            let count = selectedIds.count + extraItems.count // Total items
+                             if count > 0 {
+                                Text("\(count) \("item(s) ready".localized) (\("Save".localized) \(String(format: "%.2f", totalSavings)) ₼)")
                                     .font(.caption)
                                     .opacity(0.9)
                             } else {
-                                Text("Select at least 1 item".localized)
+                                Text("Select items".localized)
                                     .font(.caption)
                                     .opacity(0.9)
                             }
@@ -133,11 +167,11 @@ struct BrandSelectionScreen: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(selectedIds.isEmpty ? Color.gray : Color.green)
+                        .background((selectedIds.count + extraItems.count) == 0 ? Color.gray : Color.green)
                         .cornerRadius(12)
                         .padding()
                     }
-                    .disabled(selectedIds.isEmpty)
+                    .disabled((selectedIds.count + extraItems.count) == 0)
                 }
             } else {
                  Text("No deals found".localized)
@@ -210,6 +244,8 @@ struct BrandSelectionScreen: View {
         // Update state with animation
         withAnimation {
             selectedIds = newSelection
+            // Clear all custom brands when auto-selecting
+            customBrands.removeAll()
         }
     }
 }
@@ -245,6 +281,7 @@ struct AutoSelectButton: View {
 struct DealFoundCard: View {
     let group: BrandGroup
     @Binding var selectedIds: [String]
+    @Binding var customBrands: [String: String]
     @EnvironmentObject var localization: LocalizationManager
     @State private var isExpanded = false
     
@@ -329,10 +366,41 @@ struct DealFoundCard: View {
                             // Update Only Source of Truth
                             selectedIds.removeAll { id in group.options.contains { $0.id == id } }
                             selectedIds.append(option.id)
+                            // Clear custom brand if deal selected
+                            customBrands[group.itemName] = ""
+                            // Collapse list on selection
+                            isExpanded = false
                         }
                     }
                     // Add transition for smoother expand/collapse
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                
+                // Auto-Select best option if not defined
+                // (Logic handled in parent onAppear, or here if we want robust card)
+                
+                // Custom Brand Input
+                if isExpanded || activeSelectionId == nil {
+                     TextField("Or enter your own brand...".localized, text: Binding(
+                         get: { 
+                             let val = customBrands[group.itemName] ?? ""
+                             return val == "[SKIPPED]" ? "" : val
+                         },
+                         set: { newValue in 
+                             if !newValue.isEmpty {
+                                 withAnimation {
+                                     selectedIds.removeAll { id in group.options.contains { $0.id == id } }
+                                 }
+                             }
+                             if newValue.isEmpty && customBrands[group.itemName] == "[SKIPPED]" {
+                                 // Leave it skipped if it is already
+                             } else {
+                                 customBrands[group.itemName] = newValue 
+                             }
+                         }
+                     ))
+                     .textFieldStyle(RoundedBorderTextFieldStyle())
+                     .padding(.top, 4)
                 }
                 
                 // Expand/Collapse Button
@@ -346,7 +414,8 @@ struct DealFoundCard: View {
                             Text(isExpanded ? "Show Less".localized : String(format: "See %d More Options".localized, group.options.count - 1))
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            Image(systemName: "chevron.down")
+                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         }
                         .foregroundColor(.blue)
                         .padding(.vertical, 8)
@@ -360,15 +429,21 @@ struct DealFoundCard: View {
                 Button(action: {
                     withAnimation {
                          selectedIds.removeAll { id in group.options.contains { $0.id == id } }
-                         // Optionally collapse?
-                         // isExpanded = false
+                         if customBrands[group.itemName] == "[SKIPPED]" {
+                             customBrands.removeValue(forKey: group.itemName)
+                         } else {
+                             customBrands[group.itemName] = "[SKIPPED]"
+                         }
                     }
                 }) {
-                    Text("Skip this item".localized)
+                    let isSkipped = customBrands[group.itemName] == "[SKIPPED]"
+                    Text(isSkipped ? "Item Skipped - Tap to Undo".localized : "Skip this item (Generic)".localized)
                         .font(.subheadline)
-                        .foregroundColor(.gray)
+                        .foregroundColor(isSkipped ? .white : .gray)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
+                        .background(isSkipped ? Color.gray : Color.clear)
+                        .cornerRadius(8)
                 }
             }
             .padding(20)
@@ -501,12 +576,13 @@ struct BrandOptionRow: View {
 
 struct NoDealFoundCard: View {
     let group: BrandGroup
+    @Binding var customBrands: [String: String]
     @EnvironmentObject var localization: LocalizationManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Image(systemName: "cart.badge.minus") // Approximation
+                Image(systemName: "cart.badge.minus")
                     .padding(10)
                     .background(Color.orange.opacity(0.1))
                     .foregroundColor(.orange)
@@ -534,6 +610,45 @@ struct NoDealFoundCard: View {
             .background(Color.gray.opacity(0.05))
             .cornerRadius(10)
             .foregroundColor(.gray)
+            
+            // Custom Brand Input
+            TextField("Enter brand manually...".localized, text: Binding(
+                 get: { 
+                     let val = customBrands[group.itemName] ?? ""
+                     return val == "[SKIPPED]" ? "" : val
+                 },
+                 set: { newValue in 
+                     if newValue.isEmpty && customBrands[group.itemName] == "[SKIPPED]" {
+                         // Leave it skipped
+                     } else {
+                         customBrands[group.itemName] = newValue 
+                     }
+                 }
+            ))
+            .textFieldStyle(RoundedBorderTextFieldStyle())
+            
+            // Skip Button placed after Custom Brand Input
+            HStack {
+                Text(customBrands[group.itemName] == "[SKIPPED]" ? "Item Skipped - Tap to Undo".localized : "Skip this item (Generic)".localized)
+                    .font(.caption)
+                    .bold()
+                    .foregroundColor(customBrands[group.itemName] == "[SKIPPED]" ? .white : .red)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(customBrands[group.itemName] == "[SKIPPED]" ? Color.red : Color.red.opacity(0.1))
+                    .cornerRadius(8)
+                    .onTapGesture {
+                        withAnimation {
+                            if customBrands[group.itemName] == "[SKIPPED]" {
+                                customBrands.removeValue(forKey: group.itemName)
+                            } else {
+                                customBrands[group.itemName] = "[SKIPPED]"
+                            }
+                        }
+                    }
+            }
+            .padding(.top, 4)
         }
         .padding(20)
         .background(Color.white)

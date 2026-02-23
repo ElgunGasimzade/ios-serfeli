@@ -8,6 +8,7 @@ struct ActiveRouteScreen: View {
     @State private var route: RouteDetails?
     @State private var isLoading = true
     @State private var checkedItems: Set<String> = []
+    @State private var initiallyCheckedItems: Set<String> = []
     @EnvironmentObject var localization: LocalizationManager
     
     // For navigation to Summary
@@ -98,32 +99,39 @@ struct ActiveRouteScreen: View {
                 }
                 
                 // Footer
-                VStack {
-                    // Removed NavigationLink to TripSummaryScreen
+                let allItemsIds = route?.stops.flatMap { $0.items }.map { $0.id } ?? []
+                let allItemsAreInitiallyChecked = !allItemsIds.isEmpty && initiallyCheckedItems.count == allItemsIds.count
+                
+                if !allItemsAreInitiallyChecked {
+                    VStack {
+                        // Removed NavigationLink to TripSummaryScreen
                     
                     Button(action: {
                         Task {
-                            let checkedItemsCount = checkedItems.count
+                            let newCheckedItems = checkedItems.subtracting(initiallyCheckedItems)
+                            let checkedItemsCount = newCheckedItems.count
+                            let newSavings = route?.stops.flatMap { $0.items }
+                                .filter { newCheckedItems.contains($0.id) }
+                                .reduce(0.0) { $0 + $1.savings } ?? 0.0
+                                
                             let timeSpent = route?.estTime ?? "0 mins"
                             
                             // Only save stats if items were actually purchased
                             if checkedItemsCount > 0 {
                                 do {
                                     try await APIService.shared.completeTrip(
-                                        totalSavings: totalSavings,
+                                        totalSavings: newSavings,
                                         timeSpent: timeSpent,
                                         dealsScouted: checkedItemsCount
                                     )
                                 } catch {
                                     print("Failed to save trip: \(error)")
                                 }
-                                
-                                // Mark as completed in PFM history
-                                if let pid = planId {
-                                    RouteCacheService.shared.completePlan(id: pid, checkedItems: checkedItems)
-                                }
-                            } else {
-                                // If 0 items checked, DISCARD the trip completely (don't save to history)
+                            }
+                            
+                            if let pid = planId {
+                                RouteCacheService.shared.completePlan(id: pid, checkedItems: checkedItems)
+                            } else if checkedItemsCount == 0 && routeId == "active" {
                                 if let pid = planId {
                                     RouteCacheService.shared.deletePlan(id: pid)
                                 }
@@ -150,6 +158,7 @@ struct ActiveRouteScreen: View {
                 .padding()
                 .background(Color.white)
                 .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: -5)
+                }
             }
         }
         .background(Color(UIColor.systemGroupedBackground))
@@ -173,10 +182,12 @@ struct ActiveRouteScreen: View {
             if routeId == "history" && planId == nil, let loadedRoute = self.route {
                 let allIds = loadedRoute.stops.flatMap { $0.items }.map { $0.id }
                 self.checkedItems = Set(allIds)
+                self.initiallyCheckedItems = Set(allIds)
             } else if let loadedRoute = self.route {
                 // If it's an active plan, load checked state from the items themselves
                 let checkedIds = loadedRoute.stops.flatMap { $0.items }.filter { $0.checked }.map { $0.id }
                 self.checkedItems = Set(checkedIds)
+                self.initiallyCheckedItems = Set(checkedIds)
             }
         }
     } // Close body
@@ -209,12 +220,20 @@ struct StopCard: View {
                     VStack(alignment: .leading) {
                         Text(stop.store).font(.headline)
                         
-                        // Broken down for compiler
-                        let distanceText = "\(stop.distance) " + "away".localized
-                        let itemsText = " • \(stop.items.count) " + "Items".localized
-                        Text(distanceText + itemsText)
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                        // Handle both old cached name and new name
+                        if stop.store == "Other items" || stop.store == "Other Stores" {
+                            let itemsText = "\(stop.items.count) " + "Items".localized
+                            Text(itemsText)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        } else {
+                            // Broken down for compiler
+                            let distanceText = "\(stop.distance) " + "away".localized
+                            let itemsText = " • \(stop.items.count) " + "Items".localized
+                            Text(distanceText + itemsText)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
                     }
                 }
                 
@@ -237,6 +256,7 @@ struct StopCard: View {
                         .foregroundColor(.blue)
                         .cornerRadius(10)
                 }
+                .opacity(stop.store == "Other items" || stop.store == "Other Stores" ? 0 : 1) // Hide for generic stop
             }
             .padding()
             .background(Color.gray.opacity(0.05))
@@ -275,16 +295,24 @@ struct StopCard: View {
                                     .foregroundColor(checkedItems.contains(item.id) ? .gray : .primary)
                                     .strikethrough(checkedItems.contains(item.id))
                                 
-                                Text("\((item.aisle == "General" ? "General".localized : item.aisle)) • \(String(format: "%.2f", item.price)) ₼")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                if stop.store == "Other items" || stop.store == "Other Stores" || item.price == 0 {
+                                    Text(item.aisle == "General" ? "General".localized : item.aisle)
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                } else {
+                                    Text("\((item.aisle == "General" ? "General".localized : item.aisle)) • \(String(format: "%.2f", item.price)) ₼")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
                             }
                             
                             Spacer()
                             
-                            Text("Save".localized + " \(String(format: "%.2f", item.savings)) ₼")
-                                .font(.caption).bold()
-                                .foregroundColor(.green)
+                            if stop.store != "Other items" && stop.store != "Other Stores" && item.savings > 0 {
+                                Text("Save".localized + " \(String(format: "%.2f", item.savings)) ₼")
+                                    .font(.caption).bold()
+                                    .foregroundColor(.green)
+                            }
                         }
                         .padding()
                         

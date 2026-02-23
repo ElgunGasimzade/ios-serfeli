@@ -24,7 +24,7 @@ class LocalWatchlistService: ObservableObject {
         guard !savedItems.contains(where: { $0.name.lowercased() == name.lowercased() }) else { return }
         
         let newItem = WatchlistItem(
-            id: UUID().uuidString, // Unique ID for the list item
+            id: UUID().uuidString, // Temp ID until refreshed
             name: name,
             status: "Watching prices...",
             subtitle: "Checking deals...",
@@ -32,9 +32,20 @@ class LocalWatchlistService: ObservableObject {
             iconType: "tag.fill"
         )
         
-        // Append to local list
+        // Append to local list optimistically
         savedItems.insert(newItem, at: 0)
         persistItems()
+        
+        // Sync to backend
+        guard let userId = AuthService.shared.userId else { return }
+        Task {
+            do {
+                _ = try await APIService.shared.addToWatchlist(userId: userId, name: name)
+                // Optionally refresh the list from backend here
+            } catch {
+                print("Failed to save watchlist item to backend: \(error)")
+            }
+        }
     }
     
     func updateItemStatus(id: String, status: String, subtitle: String, badge: String?) {
@@ -55,6 +66,20 @@ class LocalWatchlistService: ObservableObject {
     
     func removeItem(_ id: String) {
         savedItems.removeAll(where: { $0.id == id })
+        persistItems()
+        
+        guard let userId = AuthService.shared.userId else { return }
+        Task {
+            do {
+                try await APIService.shared.removeFromWatchlist(userId: userId, itemId: id)
+            } catch {
+                print("Failed to remove watchlist item from backend: \(error)")
+            }
+        }
+    }
+    
+    func clearWatchlist() {
+        savedItems.removeAll()
         persistItems()
     }
     

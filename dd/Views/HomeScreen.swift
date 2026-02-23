@@ -42,24 +42,34 @@ struct HomeScreen: View {
     }
     @EnvironmentObject var localization: LocalizationManager
     
+    @ObservedObject private var locationManager = LocationManager.shared
+    
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Custom Header - always show
+                    // Custom Header with Settings Button
                     HStack(spacing: 12) {
-                            Image("HeaderLogo")
-                                .resizable()
-                                .renderingMode(.original) // Force original colors
-                                .scaledToFit()
-                                .frame(width: 40, height: 40)
-                            Text("Daily Deals".localized)
-                                .font(.largeTitle)
-                                .bold()
+                        Image("HeaderLogo")
+                            .resizable()
+                            .renderingMode(.original)
+                            .scaledToFit()
+                            .frame(width: 40, height: 40)
+                        Text("Daily Deals".localized)
+                            .font(.largeTitle)
+                            .bold()
+                        
+                        Spacer()
+                        
+                        NavigationLink(destination: ProfileScreen()
+                            .environmentObject(localization)) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.title2)
+                                .foregroundColor(.gray)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
 
                     // Search Bar - always show
                     SearchBar(text: $searchQuery)
@@ -129,6 +139,8 @@ struct HomeScreen: View {
                                         
                                         Text(selectedSort == .discountPct ? "Sort".localized : selectedSort.displayName)
                                             .id(selectedSort) // Optimize transition
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
                                     }
                                     .font(.subheadline)
                                     .padding(.horizontal, 8)
@@ -166,6 +178,8 @@ struct HomeScreen: View {
                                         Image(systemName: "line.3.horizontal.decrease.circle")
                                         Text(selectedStore ?? "All Stores".localized)
                                             .id(selectedStore)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
                                     }
                                     .font(.subheadline)
                                     .padding(.horizontal, 12)
@@ -253,6 +267,18 @@ struct HomeScreen: View {
                     Task { await loadFeed(reload: true) }
                 }))
             }
+            .onChange(of: locationManager.location) { _ in
+                Task {
+                    await loadStores()
+                    await loadFeed(reload: true)
+                }
+            }
+            .onChange(of: locationManager.searchRangeKm) { _ in
+                Task {
+                    await loadStores()
+                    await loadFeed(reload: true)
+                }
+            }
         }
     }
     
@@ -304,6 +330,8 @@ struct HomeScreen: View {
             
             isLoading = false
         } catch {
+            if (error as? URLError)?.code == .cancelled || (error as NSError).code == NSURLErrorCancelled { return }
+            if case APIError.cancelled = error { return }
             isLoading = false
             errorMessage = error.localizedDescription
             showError = true
@@ -327,22 +355,31 @@ struct HeroSection: View {
     var body: some View {
         VStack(alignment: .leading) {
             HStack {
-                Text(hero.title).font(.title2).bold()
+                Text(hero.title)
+                    .font(.title2)
+                    .bold()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer()
-                Text(hero.subtitle).font(.caption).foregroundColor(.blue)
+                Text(hero.subtitle)
+                    .font(.caption)
+                    .foregroundColor(.blue)
             }
             
             ZStack(alignment: .bottomLeading) {
-                AsyncImage(url: URL(string: hero.product.imageUrl)) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        Color.gray.opacity(0.3)
-                    }
-                }
-                .frame(height: 200)
-                .clipped()
-                .cornerRadius(16)
+                Color.clear
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 200, maxHeight: 200)
+                    .overlay(
+                        AsyncImage(url: URL(string: hero.product.imageUrl)) { phase in
+                            if let image = phase.image {
+                                image.resizable().scaledToFill()
+                            } else {
+                                Color.gray.opacity(0.3)
+                            }
+                        }
+                    )
+                    .clipped()
+                    .cornerRadius(16)
                 
                 if let discount = hero.product.discountPercent, discount > 0 {
                     Text(String(format: "off_percent_format".localized, discount))
@@ -365,10 +402,17 @@ struct HeroSection: View {
             
             HStack(alignment: .top) {
                 VStack(alignment: .leading) {
-                    Text(hero.product.brand ?? "").font(.caption).foregroundColor(.gray)
-                    Text(hero.product.name).font(.headline)
+                    Text(hero.product.brand ?? "")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(hero.product.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                Spacer()
+                Spacer(minLength: 10)
                 VStack(alignment: .trailing) {
                     Text("\(String(format: "%.2f", hero.product.price)) ₼")
                         .font(.title3).bold().foregroundColor(.blue)

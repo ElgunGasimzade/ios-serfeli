@@ -2,9 +2,18 @@ import SwiftUI
 
 struct PlanHistoryScreen: View {
     @ObservedObject var routeService = RouteCacheService.shared
+    @State private var selectedItem: RouteHistoryItem?
+    @State private var navigateToDetails = false
     
     var body: some View {
-        List {
+        ZStack {
+            // Hidden Link for safe navigation
+            NavigationLink(
+                destination: selectedDestination,
+                isActive: $navigateToDetails
+            ) { EmptyView() }
+            
+            List {
             // Section for spacing if needed or just plain list
             if routeService.history.isEmpty {
                  VStack(spacing: 16) {
@@ -21,7 +30,10 @@ struct PlanHistoryScreen: View {
                 .listRowBackground(Color.clear)
             } else {
                 ForEach(routeService.history) { item in
-                    HistoryCard(item: item)
+                    HistoryCard(item: item) { clickedItem in
+                        selectedItem = clickedItem
+                        navigateToDetails = true
+                    }
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)) // Custom padding
@@ -34,11 +46,22 @@ struct PlanHistoryScreen: View {
                 }
             }
         }
+        }
         .listStyle(.plain)
         .background(Color(UIColor.systemGroupedBackground))
         .navigationTitle("Shopping History".localized)
         .onAppear {
             routeService.refreshHistory()
+            navigateToDetails = false
+        }
+    }
+    
+    // Extracted destination view
+    private var selectedDestination: some View {
+        if let item = selectedItem {
+            return AnyView(ActiveRouteScreen(routeId: "history", preloadedRoute: item.route, planId: item.status == "active" ? item.id : nil))
+        } else {
+            return AnyView(EmptyView())
         }
     }
 }

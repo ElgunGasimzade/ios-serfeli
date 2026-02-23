@@ -4,10 +4,6 @@ struct ContentView: View {
     @EnvironmentObject var localization: LocalizationManager
     @State private var selection = 0
     
-    // Listen for tab switching requests
-    // Ideally this would be an injected environment object/service, but for speed, 
-    // we can use NotificationCenter or a simple SharedState if already existing.
-    // Let's use NotificationCenter for simplicity given the constraints.
     let tabSwitchPub = NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToPFM"))
     
     var body: some View {
@@ -18,7 +14,6 @@ struct ContentView: View {
                 }
                 .tag(0)
             
-            // Watchlist
             WatchlistScreen()
                 .tabItem {
                     Label("Watchlist".localized, systemImage: "eye")
@@ -30,24 +25,22 @@ struct ContentView: View {
                     Label("Shop".localized, systemImage: "magnifyingglass")
                 }
                 .tag(2)
+            
+            FamilyMainScreen()
+                .tabItem {
+                    Label("Group".localized, systemImage: "person.3")
+                }
+                .tag(3)
                 
-            // My Plan (PFM)
             PFMView()
                 .tabItem {
                     Label("My Plan".localized, systemImage: "list.bullet.clipboard")
-                }
-                .tag(3)
-            
-            // Profile
-            ProfileScreen()
-                .tabItem {
-                    Label("Profile".localized, systemImage: "person")
                 }
                 .tag(4)
         }
         .accentColor(.blue)
         .onReceive(tabSwitchPub) { _ in
-            selection = 3 // Switch to PFM tab
+            selection = 4
         }
     }
 }

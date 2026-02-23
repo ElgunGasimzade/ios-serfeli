@@ -13,6 +13,7 @@ struct WatchlistScreen: View {
     @State private var selectedBrandGroup: [BrandGroup] = []
     @State private var isAddingToPlan = false
     @State private var editMode: EditMode = .inactive
+    @FocusState private var isInputFocused: Bool
     
     @ObservedObject private var watchlistService = LocalWatchlistService.shared
     @EnvironmentObject var localization: LocalizationManager
@@ -26,12 +27,17 @@ struct WatchlistScreen: View {
                          Image(systemName: "magnifyingglass")
                              .foregroundColor(.gray)
                          TextField("Add item (e.g. Diapers)...".localized, text: $searchQuery)
+                             .focused($isInputFocused)
+                             .submitLabel(.continue)
                              .onSubmit {
                                  if !searchQuery.isEmpty {
                                      watchlistService.saveItem(name: searchQuery)
                                      searchQuery = ""
                                      suggestions = []
                                      isSearching = false
+                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                         isInputFocused = true
+                                     }
                                  }
                              }
                          if !searchQuery.isEmpty {
@@ -40,6 +46,7 @@ struct WatchlistScreen: View {
                                  searchQuery = "" // Clear
                                  suggestions = []
                                  isSearching = false
+                                 isInputFocused = true
                              }
                              .font(.caption).bold()
                              .padding(.horizontal, 12)
@@ -117,7 +124,18 @@ struct WatchlistScreen: View {
                      } else {
                          List {
                              // Combine Local + API Items
-                             let allItems = watchlistService.savedItems + (response?.items ?? [])
+                             let allItems: [WatchlistItem] = {
+                                 var seenSet = Set<String>()
+                                 var merged = [WatchlistItem]()
+                                 for item in watchlistService.savedItems + (response?.items ?? []) {
+                                     let lname = item.name.lowercased()
+                                     if !seenSet.contains(lname) {
+                                         seenSet.insert(lname)
+                                         merged.append(item)
+                                     }
+                                 }
+                                 return merged
+                             }()
                              
                              if !allItems.isEmpty {
                                  ForEach(allItems) { item in
@@ -135,6 +153,11 @@ struct WatchlistScreen: View {
                                      indexSet.forEach { index in
                                          let item = allItems[index]
                                          watchlistService.removeItem(item.id)
+                                         
+                                         // Also remove from local API response cache so UI updates immediately
+                                         if let apiIndex = response?.items.firstIndex(where: { $0.id == item.id }) {
+                                             response?.items.remove(at: apiIndex)
+                                         }
                                      }
                                  }
                              }
@@ -153,6 +176,7 @@ struct WatchlistScreen: View {
                                  }
                                  .frame(maxWidth: .infinity, alignment: .center)
                                  .listRowBackground(Color.clear)
+                                 .listRowSeparator(.hidden)
                                  .padding(.top, 50)
                              }
                          }
@@ -177,7 +201,9 @@ struct WatchlistScreen: View {
              .environment(\.editMode, $editMode)
              .task {
                  do {
-                     response = try await APIService.shared.getWatchlist()
+                     if let userId = AuthService.shared.userId {
+                         response = try await APIService.shared.getWatchlist(userId: userId)
+                     }
                      await refreshWatchlistData()
                  } catch {
                      print("Error loading watchlist: \(error)")
@@ -222,12 +248,21 @@ struct WatchlistScreen: View {
     @State private var scanFlowGroups: [BrandGroup] = []
 
     func refreshWatchlistData() async {
-        let savedItems = watchlistService.savedItems
-        if savedItems.isEmpty { return }
+        // We need to refresh both savedItems AND response items
+        var combinedItems = watchlistService.savedItems
+        if let apiItems = response?.items {
+            for apiItem in apiItems {
+                if !combinedItems.contains(where: { $0.name.lowercased() == apiItem.name.lowercased() }) {
+                    combinedItems.append(apiItem)
+                }
+            }
+        }
+        
+        if combinedItems.isEmpty { return }
         
         // SCAN FLOW SIMULATION
         // 1. Create DetectedItems from Watchlist
-        let scanItems = savedItems.map { item in
+        let scanItems = combinedItems.map { item in
             DetectedItem(
                 id: UUID().uuidString,
                 name: item.name,
@@ -251,8 +286,8 @@ struct WatchlistScreen: View {
             await MainActor.run {
                 self.scanFlowGroups = groups
                 
-                // 4. Update Local Item Statuses
-                for item in savedItems {
+                // 4. Update Local Item Statuses (Local & API)
+                for item in combinedItems {
                     // Find matching group
                     if let group = groups.first(where: {
                         $0.itemName.caseInsensitiveCompare(item.name) == .orderedSame ||
@@ -266,19 +301,45 @@ struct WatchlistScreen: View {
                          
                          let minPrice = group.options.compactMap { $0.price }.min() ?? 0
                          
-                         watchlistService.updateItemStatus(
-                             id: item.id,
-                             status: "\(count) \("Deals Found".localized)",
-                             subtitle: "From \(String(format: "%.2f", minPrice)) ₼",
-                             badge: maxDiscount > 0 ? "-\(maxDiscount)%" : nil
-                         )
+                         let updatedStatus = count > 0 ? "\(count) \("Deals Found".localized)" : "No active deals".localized
+                         let updatedSubtitle = count > 0 ? "From \(String(format: "%.2f", minPrice)) ₼" : "Watching prices...".localized
+                         let updatedBadge = maxDiscount > 0 ? "-\(maxDiscount)%" : nil
+                         
+                         // Update local service
+                         if watchlistService.isItemSaved(name: item.name) {
+                             watchlistService.updateItemStatus(
+                                 id: item.id,
+                                 status: updatedStatus,
+                                 subtitle: updatedSubtitle,
+                                 badge: updatedBadge
+                             )
+                         }
+                         
+                         // Update API response cache
+                         if let apiIndex = response?.items.firstIndex(where: { $0.id == item.id }) {
+                             response?.items[apiIndex].status = updatedStatus
+                             response?.items[apiIndex].subtitle = updatedSubtitle
+                             response?.items[apiIndex].badge = updatedBadge
+                         }
                     } else {
-                        watchlistService.updateItemStatus(
-                            id: item.id,
-                            status: "No active deals".localized,
-                            subtitle: "Watching prices...".localized,
-                            badge: nil
-                        )
+                        let updatedStatus = "No active deals".localized
+                        let updatedSubtitle = "Watching prices...".localized
+                        
+                        if watchlistService.isItemSaved(name: item.name) {
+                            watchlistService.updateItemStatus(
+                                id: item.id,
+                                status: updatedStatus,
+                                subtitle: updatedSubtitle,
+                                badge: nil
+                            )
+                        }
+                        
+                        // Update API response cache
+                        if let apiIndex = response?.items.firstIndex(where: { $0.id == item.id }) {
+                            response?.items[apiIndex].status = updatedStatus
+                            response?.items[apiIndex].subtitle = updatedSubtitle
+                            response?.items[apiIndex].badge = nil
+                        }
                     }
                 }
             }
@@ -457,23 +518,18 @@ extension Color {
 struct WatchlistItemRow: View {
     let item: WatchlistItem
     
-    var isDealFound: Bool {
-        // Robust check: If badge is present (discount) or status contains localized "Found"/"Tapıldı"
-        // Better: Check if badge is not nil, as deals usually have a badge. 
-        // Or check against known localized strings for "Deals Found"
-        return item.badge != nil || item.status.contains("Found") || item.status.contains("Tapıldı")
-    }
-    
     var body: some View {
+        let isDealActive = item.badge != nil || (item.status.contains("Found") && !item.status.starts(with: "0")) || (item.status.contains("Tapıldı") && !item.status.starts(with: "0"))
+        
         ZStack(alignment: .leading) {
             HStack(spacing: 12) {
                 // Icon
                 ZStack {
                     Circle()
-                        .fill(isDealFound ? Color(hex: "D1FAE5") : Color.gray.opacity(0.1))
+                        .fill(isDealActive ? Color(hex: "D1FAE5") : Color.gray.opacity(0.1))
                         .frame(width: 40, height: 40)
                     Image(systemName: item.iconType)
-                        .foregroundColor(isDealFound ? Color(hex: "059669") : .gray)
+                        .foregroundColor(isDealActive ? Color(hex: "059669") : .gray)
                         .font(.system(size: 20))
                 }
                 
@@ -483,7 +539,7 @@ struct WatchlistItemRow: View {
                         .foregroundColor(Color(hex: "111827"))
                     
                     HStack(spacing: 4) {
-                        if isDealFound {
+                        if isDealActive {
                             Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 10))
                         } else {
@@ -492,7 +548,7 @@ struct WatchlistItemRow: View {
                         
                         Text(item.status) // "X Deals Found" or "Watching prices..."
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(isDealFound ? Color(hex: "059669") : .gray)
+                            .foregroundColor(isDealActive ? Color(hex: "059669") : .gray)
                     }
                 }
                 
@@ -506,8 +562,7 @@ struct WatchlistItemRow: View {
                         .padding(.vertical, 2)
                         .background(Color(hex: "BE123C"))
                         .clipShape(Capsule())
-                } else if !isDealFound {
-                    // Spinner logic could go here if loading, but item.status is static until update
+                } else if !isDealActive {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.caption)
                         .foregroundColor(.gray.opacity(0.5))
@@ -518,17 +573,8 @@ struct WatchlistItemRow: View {
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isDealFound ? Color(hex: "D1FAE5") : Color.gray.opacity(0.2), lineWidth: 1)
+                    .stroke(isDealActive ? Color(hex: "D1FAE5") : Color.gray.opacity(0.2), lineWidth: 1)
             )
-            
-            // Left Green Bar for Deals
-            if isDealFound {
-                Rectangle()
-                    .fill(Color(hex: "059669"))
-                    .frame(width: 4)
-                    .cornerRadius(2, corners: [.topLeft, .bottomLeft])
-                    .padding(.vertical, 1)
-            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)

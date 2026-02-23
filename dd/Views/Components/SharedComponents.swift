@@ -36,29 +36,42 @@ struct ProductCard: View {
                 .background(Color.gray.opacity(0.05))
                 .cornerRadius(12)
                 
-                Text(product.name).font(.subheadline).lineLimit(1)
+                Text(product.name)
+                    .font(.subheadline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
                 
-                Text(product.store ?? "").font(.caption).foregroundColor(.gray)
+                Text(product.store ?? "")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
                 
-                HStack {
-                    VStack(alignment: .leading) {
+                Spacer() // Pushes price to the bottom
+                
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("\(String(format: "%.2f", product.price)) ₼").bold()
                         if let original = product.originalPrice {
                             Text("\(String(format: "%.2f", original)) ₼")
                                 .font(.caption2).strikethrough().foregroundColor(.gray)
+                        } else {
+                            Text(" ") // Invisible spacer to maintain height
+                                .font(.caption2)
                         }
                     }
                     Spacer()
                     if let discount = product.discountPercent {
                         Text("-\(discount)%")
                             .font(.caption).bold()
-                            .padding(4)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
                             .background(Color.blue.opacity(0.1))
                             .foregroundColor(.blue)
                             .cornerRadius(4)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(10)
             .background(Color.white)
             .cornerRadius(16)
@@ -78,5 +91,6 @@ struct ProductCard: View {
                 .padding(8)
             }
         }
+        .frame(height: 240)
     }
 }

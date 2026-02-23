@@ -6,7 +6,9 @@ enum APIError: Error, LocalizedError {
     case serverError
     case decodingError
     case serviceUnavailable
+    case unauthorized
     case unknown(Error)
+    case cancelled
     
     var errorDescription: String? {
         switch self {
@@ -14,7 +16,9 @@ enum APIError: Error, LocalizedError {
         case .serverError: return "Server returned an error."
         case .decodingError: return "Failed to parse data."
         case .serviceUnavailable: return "Service is currently unavailable. Showing demo data."
+        case .unauthorized: return "User is not authorized."
         case .unknown(let error): return error.localizedDescription
+        case .cancelled: return "cancelled"
         }
     }
 }
@@ -87,6 +91,9 @@ class APIService {
             }
             return try JSONDecoder().decode(HomeFeedResponse.self, from: data)
         } catch {
+            if (error as? URLError)?.code == .cancelled || (error as NSError).code == NSURLErrorCancelled {
+                throw APIError.cancelled
+            }
             print("Network failed, fallback to mock: \(error)")
              throw APIError.unknown(error)
         }
@@ -130,12 +137,25 @@ class APIService {
         return try JSONDecoder().decode([String].self, from: data)
     }
     
-    func getBrands(scanId: String? = nil) async throws -> BrandSelectionResponse {
+    func getBrands(scanId: String? = nil, items: [String]? = nil) async throws -> BrandSelectionResponse {
 
         var urlString = "\(baseURL)/deals/brands"
+        var hasParams = false
+        
         if let scanId = scanId {
             urlString += "?scanId=\(scanId)"
+            hasParams = true
         }
+        
+        // Add items as comma-separated query param if provided
+        if let items = items, !items.isEmpty {
+            let itemsParam = items.joined(separator: ",").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            urlString += hasParams ? "&" : "?"
+            urlString += "items=\(itemsParam)"
+            hasParams = true
+        }
+        
+        print("DEBUG: Fetching brands with URL: \(urlString)")
         
         // Append Location if enabled and available
         if LocationManager.shared.isLocationEnabled, let loc = LocationManager.shared.location {
@@ -143,7 +163,7 @@ class APIService {
             let lon = loc.coordinate.longitude
             let range = LocationManager.shared.searchRangeKm
             
-            let prefix = urlString.contains("?") ? "&" : "?"
+            let prefix = hasParams ? "&" : "?"
             urlString += "\(prefix)lat=\(lat)&lon=\(lon)&range=\(range)"
         }
         
@@ -198,22 +218,35 @@ class APIService {
         }
     }
     
-    func getRouteOptions(ids: [String]) async throws -> OptimizeResponse {
-         // POST /planning/optimize
-         guard let url = URL(string: "\(baseURL)/planning/optimize") else { throw APIError.invalidURL }
-         var request = URLRequest(url: url)
-         request.httpMethod = "POST"
-         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-         
-         // Send actual selected IDs from user's brand selection
-         let body: [String: Any] = ["ids": ids]
-         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-         
-         let (data, response) = try await URLSession.shared.data(for: request)
-         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-             throw APIError.serverError
-         }
-         return try JSONDecoder().decode(OptimizeResponse.self, from: data)
+    func getRouteOptions(ids: [String]? = nil, items: [String]? = nil) async throws -> OptimizeResponse {
+        guard let url = URL(string: "\(baseURL)/planning/optimize") else { throw APIError.invalidURL }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var body: [String: Any] = [:]
+        if let ids = ids, !ids.isEmpty {
+            body["ids"] = ids
+        }
+        if let items = items, !items.isEmpty {
+            body["items"] = items
+        }
+        
+        if let location = LocationManager.shared.location {
+            body["lat"] = location.coordinate.latitude
+            body["lon"] = location.coordinate.longitude
+        }
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        return try JSONDecoder().decode(OptimizeResponse.self, from: data)
     }
     
     func getRouteDetails(optionId: String) async throws -> RouteDetails {
@@ -226,14 +259,52 @@ class APIService {
         return try JSONDecoder().decode(RouteDetails.self, from: data)
     }
     
-    func getWatchlist() async throws -> WatchlistResponse {
-        guard let url = URL(string: "\(baseURL)/watchlist") else { throw APIError.invalidURL }
+    func getWatchlist(userId: String) async throws -> WatchlistResponse {
+        guard let url = URL(string: "\(baseURL)/watchlist?userId=\(userId)") else { throw APIError.invalidURL }
         
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw APIError.serverError
         }
         return try JSONDecoder().decode(WatchlistResponse.self, from: data)
+    }
+    
+    struct AddToWatchlistResponse: Codable {
+        let success: Bool
+        let id: String
+    }
+
+    func addToWatchlist(userId: String, name: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/watchlist") else { throw APIError.invalidURL }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "userId": userId,
+            "name": name
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        let res = try JSONDecoder().decode(AddToWatchlistResponse.self, from: data)
+        return res.id
+    }
+    
+    func removeFromWatchlist(userId: String, itemId: String) async throws {
+        guard let url = URL(string: "\(baseURL)/watchlist/\(itemId)?userId=\(userId)") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
     }
     
     func completeTrip(totalSavings: Double, timeSpent: String, dealsScouted: Int) async throws {
@@ -501,4 +572,235 @@ class APIService {
         }
         return try JSONDecoder().decode(UserStats.self, from: data)
     }
+    
+    // MARK: - Family Management
+    
+    func createFamily(userId: String, familyName: String) async throws -> FamilyResponse {
+        guard let url = URL(string: "\(baseURL)/family/create") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["userId": userId, "familyName": familyName]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(FamilyResponse.self, from: data)
+    }
+    
+    func joinFamily(userId: String, inviteCode: String) async throws -> FamilyResponse {
+        guard let url = URL(string: "\(baseURL)/family/join") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["userId": userId, "inviteCode": inviteCode]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(FamilyResponse.self, from: data)
+    }
+    
+    func getMyFamily(userId: String) async throws -> FamilyResponse {
+        guard let url = URL(string: "\(baseURL)/family/my-family?userId=\(userId)") else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(FamilyResponse.self, from: data)
+    }
+    
+    func getFamilyList(userId: String) async throws -> FamilyListResponse {
+        guard let url = URL(string: "\(baseURL)/family/list?userId=\(userId)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(FamilyListResponse.self, from: data)
+    }
+    
+    func leaveFamily(userId: String, familyId: String) async throws {
+        guard let url = URL(string: "\(baseURL)/family/leave") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body = ["userId": userId, "familyId": familyId]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
+    // MARK: - Family Shopping Lists
+    
+    func createShoppingList(familyId: String, name: String) async throws -> ShoppingList {
+        guard let url = URL(string: "\(baseURL)/family/shopping-lists/create") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        guard let userId = AuthService.shared.userId else { throw APIError.unauthorized }
+        
+        let body: [String: Any] = [
+            "familyId": familyId,
+            "userId": userId,
+            "name": name
+        ]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        struct Response: Codable { let list: ShoppingList }
+        let res = try JSONDecoder().decode(Response.self, from: data)
+        return res.list
+    }
+    
+    func getShoppingLists(familyId: String) async throws -> [ShoppingList] {
+        guard let url = URL(string: "\(baseURL)/family/shopping-lists?familyId=\(familyId)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            print("Error fetch list: \(response)")
+            throw APIError.serverError
+        }
+        
+        let res = try JSONDecoder().decode(ShoppingListsResponse.self, from: data)
+        return res.lists
+    }
+    
+    func deleteShoppingList(listId: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/family/shopping-lists/\(listId)") else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+
+    // MARK: - Family Shopping List Items
+    
+    func getFamilyShoppingList(familyId: String, listId: Int? = nil) async throws -> FamilyShoppingListResponse {
+        var urlString = "\(baseURL)/family/shopping-list?familyId=\(familyId)"
+        if let listId = listId {
+            urlString.append("&listId=\(listId)")
+        }
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(FamilyShoppingListResponse.self, from: data)
+    }
+    
+    func addToFamilyShoppingList(familyId: String, userId: String, itemName: String, quantity: Int = 1, notes: String? = nil, brandName: String? = nil, storeName: String? = nil, listId: Int? = nil, price: Double? = nil, originalPrice: Double? = nil, productId: String? = nil) async throws -> FamilyShoppingItem {
+        guard let url = URL(string: "\(baseURL)/family/shopping-list/add") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var body: [String: Any] = [
+            "familyId": familyId,
+            "userId": userId,
+            "itemName": itemName,
+            "quantity": quantity
+        ]
+        
+        if let notes = notes { body["notes"] = notes }
+        if let brandName = brandName { body["brandName"] = brandName }
+        if let storeName = storeName { body["storeName"] = storeName }
+        if let listId = listId { body["listId"] = listId }
+        if let price = price { body["price"] = price }
+        if let originalPrice = originalPrice { body["originalPrice"] = originalPrice }
+        if let productId = productId { body["productId"] = productId }
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        struct Response: Codable { let item: FamilyShoppingItem }
+        let res = try JSONDecoder().decode(Response.self, from: data)
+        return res.item
+    }
+    
+    func updateFamilyShoppingItem(itemId: String, status: String? = nil, purchasedBy: String? = nil, quantity: Int? = nil, notes: String? = nil, brandName: String? = nil, storeName: String? = nil, price: Double? = nil, originalPrice: Double? = nil, productId: String? = nil) async throws {
+        guard let url = URL(string: "\(baseURL)/family/shopping-list/\(itemId)") else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        var body: [String: Any] = [:]
+        if let s = status { body["status"] = s }
+        if let u = purchasedBy { body["purchasedBy"] = u }
+        if let q = quantity { body["quantity"] = q }
+        if let n = notes { body["notes"] = n }
+        if let b = brandName { body["brandName"] = b }
+        if let st = storeName { body["storeName"] = st }
+        if let p = price { body["price"] = p }
+        if let op = originalPrice { body["originalPrice"] = op }
+        if let pid = productId { body["productId"] = pid }
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
+    func deleteFamilyShoppingItem(itemId: String) async throws {
+        guard let url = URL(string: "\(baseURL)/family/shopping-list/\(itemId)") else {
+            throw APIError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
 }
+

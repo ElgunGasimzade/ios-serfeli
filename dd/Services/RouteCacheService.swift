@@ -103,33 +103,47 @@ class RouteCacheService: ObservableObject {
     func completePlan(id: String, checkedItems: Set<String>) {
         guard let activeItem = history.first(where: { $0.id == id }) else { return }
         
-        // Filter Route to only checked items
         var newStops: [RouteStore] = []
         for stop in activeItem.route.stops {
-            let purchasedItems = stop.items.filter { checkedItems.contains($0.id) }
-            if !purchasedItems.isEmpty {
-                var newStop = stop
-                newStop.items = purchasedItems
-                newStops.append(newStop)
+            var newStop = stop
+            var newItems: [RouteItem] = []
+            for item in stop.items {
+                let newItem = RouteItem(
+                    id: item.id,
+                    name: item.name,
+                    aisle: item.aisle,
+                    price: item.price,
+                    savings: item.savings,
+                    checked: checkedItems.contains(item.id)
+                )
+                newItems.append(newItem)
             }
+            newStop.items = newItems
+            newStops.append(newStop)
         }
         
         var finalRoute = activeItem.route
         finalRoute.stops = newStops
         
         // Recalculate total savings for the finalized route
-        let newTotalSavings = newStops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
+        let newTotalSavings = newStops.flatMap { $0.items }.filter { $0.checked }.reduce(0.0) { $0 + $1.savings }
         finalRoute.totalSavings = newTotalSavings
         
-        // Clear checked items for this plan as it is now complete
-        removeCheckedItems(planId: id)
+        // Check if all items are completed
+        let totalItemsCount = activeItem.route.stops.flatMap { $0.items }.count
+        let checkedItemsCount = checkedItems.count
+        let isFullyCompleted = (checkedItemsCount == totalItemsCount)
         
         Task {
             do {
                 try await APIService.shared.completePlan(planId: activeItem.id, finalRoute: finalRoute)
                 DispatchQueue.main.async {
                     if let index = self.history.firstIndex(where: { $0.id == activeItem.id }) {
-                        self.history[index].status = "completed"
+                        if isFullyCompleted {
+                            self.history[index].status = "completed"
+                            self.removeCheckedItems(planId: id)
+                            LocalWatchlistService.shared.clearWatchlist()
+                        }
                         self.history[index].route = finalRoute // Update local history too
                         self.saveLocalHistory(self.history)
                     }

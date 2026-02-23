@@ -3,8 +3,10 @@ import SwiftUI
 struct PFMView: View {
     @ObservedObject var routeService = RouteCacheService.shared
     @EnvironmentObject var localization: LocalizationManager
-    @State private var navigateToActiveTrip = false
+    @State private var navigationSelection: String?
     @State private var activePlanId: String?
+    @State private var selectedRouteItem: RouteHistoryItem?
+    @State private var routeNavMode: String = "history"
     
     // Derived Active Route (Most Recent Active)
     private var featuredActivePlan: RouteHistoryItem? {
@@ -42,10 +44,20 @@ struct PFMView: View {
                  .background(Color.white)
                  
                  ScrollView {
-                     // Hidden Navigation Link for programmatic navigation
+                     // Hidden Navigation Link for programmatic route navigation
                      NavigationLink(
-                         destination: activeRouteDestination,
-                         isActive: $navigateToActiveTrip
+                         destination: selectedRouteDestination,
+                         tag: "route",
+                         selection: $navigationSelection
+                     ) {
+                         EmptyView()
+                     }
+                     
+                     // Hidden Navigation Link for View All History
+                     NavigationLink(
+                         destination: PlanHistoryScreen(),
+                         tag: "history",
+                         selection: $navigationSelection
                      ) {
                          EmptyView()
                      }
@@ -102,7 +114,11 @@ struct PFMView: View {
                                 
                                 Divider()
                                 
-                                NavigationLink(destination: ActiveRouteScreen(routeId: "cached", preloadedRoute: item.route, planId: item.id)) {
+                                Button(action: {
+                                    selectedRouteItem = item
+                                    routeNavMode = "cached"
+                                    navigationSelection = "route"
+                                }) {
                                     HStack {
                                         Text("Continue Shopping".localized)
                                             .font(.subheadline)
@@ -185,17 +201,22 @@ struct PFMView: View {
                                         .font(.headline)
                                         .foregroundColor(.primary)
                                     Spacer()
-                                    NavigationLink(destination: PlanHistoryScreen()) {
+                                    Button(action: {
+                                        navigationSelection = "history"
+                                    }) {
                                         Text("View All".localized)
                                             .font(.subheadline)
                                             .foregroundColor(.blue)
                                     }
                                 }
                                 .padding(.horizontal, 4)
-                                
-                                ForEach(recentHistory) { item in
-                                   HistoryCard(item: item)
-                                }
+                                                                ForEach(recentHistory) { item in
+                                    HistoryCard(item: item) { clickedItem in
+                                        selectedRouteItem = clickedItem
+                                        routeNavMode = "history"
+                                        navigationSelection = "route"
+                                    }
+                                 }
                             }
                         }
                      }
@@ -203,9 +224,11 @@ struct PFMView: View {
                  }
                  .background(Color(UIColor.systemGroupedBackground))
              }
-             .navigationBarHidden(true)
              .onAppear {
                  routeService.refreshHistory()
+                 
+                 // If we came back from a completed trip, ensure navigation is unlocked
+                 navigationSelection = nil
              }
              .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("SwitchToPFM"))) { _ in
                  routeService.refreshHistory()
@@ -215,7 +238,9 @@ struct PFMView: View {
                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                      if let active = featuredActivePlan {
                          self.activePlanId = active.id
-                         self.navigateToActiveTrip = true
+                         self.selectedRouteItem = active
+                         self.routeNavMode = "cached"
+                         self.navigationSelection = "route"
                      }
                  }
              }
@@ -231,9 +256,11 @@ struct PFMView: View {
         return formatter.string(from: date)
     }
     
-    private var activeRouteDestination: some View {
-        if let item = featuredActivePlan {
-            return AnyView(ActiveRouteScreen(routeId: "cached", preloadedRoute: item.route, planId: item.id))
+    private var selectedRouteDestination: some View {
+        if let item = selectedRouteItem {
+            let mode = routeNavMode
+            let pId: String? = item.id
+            return AnyView(ActiveRouteScreen(routeId: mode, preloadedRoute: item.route, planId: pId))
         } else {
             return AnyView(Text("Loading..."))
         }
@@ -242,6 +269,7 @@ struct PFMView: View {
 
 struct HistoryCard: View {
     let item: RouteHistoryItem
+    var onTap: (RouteHistoryItem) -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -297,7 +325,9 @@ struct HistoryCard: View {
             // Link to view details just in case?
             // For now just read-only history summary
             // Link with hidden chevron workaround
-            NavigationLink(destination: ActiveRouteScreen(routeId: "history", preloadedRoute: item.route, planId: item.status == "active" ? item.id : nil)) {
+            Button(action: {
+                onTap(item)
+            }) {
                 Text(item.status == "active" ? "Continue Shopping".localized : "View Summary".localized)
                     .font(.caption).bold()
                     .frame(maxWidth: .infinity)
@@ -306,13 +336,7 @@ struct HistoryCard: View {
                     .foregroundColor(item.status == "active" ? .blue : .blue)
                     .cornerRadius(8)
             }
-            .buttonStyle(PlainButtonStyle()) // Determines if chevron appears? No, often List style.
-            // In a ScrollView + VStack, NavigationLink usually works fine without Chevron.
-            // The issue might have been the ZStack order or opacity(0).
-            // Let's just use the direct link. If chevron appears, we can live with it or find a better CSS-like fix.
-            // But user specifically asked to remove it.
-            // In plain VStack, NavigationLink DOES NOT add a chevron.
-            // So just restoring the simple link should work and look clean.
+            .buttonStyle(PlainButtonStyle())
         }
         .padding()
         .background(Color.white)

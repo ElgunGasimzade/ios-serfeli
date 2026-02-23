@@ -13,14 +13,13 @@ struct ProfileScreen: View {
     @State private var editPhone = ""
     
     var body: some View {
-        NavigationView {
-             VStack {
-                 // Avatar
-                 Image(systemName: "person.circle.fill")
-                     .resizable()
-                     .frame(width: 80, height: 80)
-                     .foregroundColor(.gray.opacity(0.8))
-                     .padding(.top)
+        VStack {
+            // Avatar
+            Image(systemName: "person.circle.fill")
+                .resizable()
+                .frame(width: 80, height: 80)
+                .foregroundColor(.gray.opacity(0.8))
+                .padding(.top, 20)
                  
                  // User Info Display
                  if !isEditing {
@@ -115,33 +114,31 @@ struct ProfileScreen: View {
                          }
                          .pickerStyle(SegmentedPickerStyle())
                      }
-                     
-                     Section(header: Text("Location Settings".localized)) {
-                         Toggle("Enable Location".localized, isOn: $locationManager.isLocationEnabled)
-                         
-                         if locationManager.isLocationEnabled {
-                             VStack(alignment: .leading) {
-                                 Text("Search Range".localized + ": \(Int(locationManager.searchRangeKm)) km")
-                                 Slider(value: $locationManager.searchRangeKm, in: 1...20, step: 1)
-                             }
-                         }
-                     }
-                 }
-                 .background(Color(UIColor.systemGroupedBackground))
-                 
-                 Spacer()
-             }
-             .navigationTitle("Profile".localized)
-             // Username Edit Alert
-             .alert("Edit Username".localized, isPresented: $isEditingUsername) {
-                 TextField("Username".localized, text: $editUsernameText)
-                 Button("Save") {
-                     authService.updateProfile(email: nil, phone: nil, username: editUsernameText)
-                 }
-                 Button("Cancel", role: .cancel) { }
-             }
-        }
-    }
+                                          Section(header: Text("Location Settings".localized)) {
+                          Toggle("Enable Location".localized, isOn: $locationManager.isLocationEnabled)
+                          
+                          if locationManager.isLocationEnabled {
+                              VStack(alignment: .leading) {
+                                  Text("Search Range".localized + ": \(Int(locationManager.searchRangeKm)) km")
+                                  Slider(value: $locationManager.searchRangeKm, in: 1...20, step: 1)
+                              }
+                          }
+                      }
+                  }
+                  .background(Color(UIColor.systemGroupedBackground))
+                  
+                  Spacer()
+              }
+              .navigationTitle("Profile".localized)
+              // Username Edit Alert
+              .alert("Edit Username".localized, isPresented: $isEditingUsername) {
+                  TextField("Username".localized, text: $editUsernameText)
+                  Button("Save") {
+                      authService.updateProfile(email: nil, phone: nil, username: editUsernameText)
+                  }
+                  Button("Cancel", role: .cancel) { }
+              }
+      }
     
     @State private var errorMessage: String?
     
@@ -181,3 +178,4 @@ struct ProfileScreen: View {
         return emailPred.evaluate(with: email)
     }
 }
+

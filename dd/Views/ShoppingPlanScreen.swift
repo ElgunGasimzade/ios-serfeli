@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ShoppingPlanScreen: View {
     var selectedIds: [String] = []
+    var items: [String] = [] // Support for item-based optimization (Family List)
+    
     @State private var response: OptimizeResponse?
     @State private var isLoading = true
     @EnvironmentObject var localization: LocalizationManager
@@ -45,7 +47,8 @@ struct ShoppingPlanScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             do {
-                response = try await APIService.shared.getRouteOptions(ids: selectedIds)
+                // Send both IDs and generic items to the backend
+                response = try await APIService.shared.getRouteOptions(ids: selectedIds, items: items)
             } catch {
                 print("Error loading plan: \(error)")
             }
