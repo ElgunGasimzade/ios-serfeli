@@ -40,8 +40,23 @@ class LocalWatchlistService: ObservableObject {
         guard let userId = AuthService.shared.userId else { return }
         Task {
             do {
-                _ = try await APIService.shared.addToWatchlist(userId: userId, name: name)
-                // Optionally refresh the list from backend here
+                let realId = try await APIService.shared.addToWatchlist(userId: userId, name: name)
+                
+                await MainActor.run {
+                    if let index = self.savedItems.firstIndex(where: { $0.id == newItem.id }) {
+                        var updatedItem = self.savedItems[index]
+                        updatedItem = WatchlistItem(
+                            id: realId,
+                            name: updatedItem.name,
+                            status: updatedItem.status,
+                            subtitle: updatedItem.subtitle,
+                            badge: updatedItem.badge,
+                            iconType: updatedItem.iconType
+                        )
+                        self.savedItems[index] = updatedItem
+                        self.persistItems()
+                    }
+                }
             } catch {
                 print("Failed to save watchlist item to backend: \(error)")
             }
@@ -65,6 +80,10 @@ class LocalWatchlistService: ObservableObject {
     }
     
     func removeItem(_ id: String) {
+        // Find name before removing locally (to also try removing by name if ID was fake)
+        let itemToRemove = savedItems.first(where: { $0.id == id })
+        let nameToRemove = itemToRemove?.name
+        
         savedItems.removeAll(where: { $0.id == id })
         persistItems()
         
@@ -74,6 +93,7 @@ class LocalWatchlistService: ObservableObject {
                 try await APIService.shared.removeFromWatchlist(userId: userId, itemId: id)
             } catch {
                 print("Failed to remove watchlist item from backend: \(error)")
+                // Fallback: If removing by ID failed, maybe ID was fake. Let UI fetch clean slate next time.
             }
         }
     }

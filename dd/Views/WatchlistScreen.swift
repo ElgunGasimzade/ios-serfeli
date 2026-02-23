@@ -123,11 +123,12 @@ struct WatchlistScreen: View {
                          .frame(maxWidth: .infinity, maxHeight: .infinity)
                      } else {
                          List {
-                             // Combine Local + API Items
                              let allItems: [WatchlistItem] = {
                                  var seenSet = Set<String>()
                                  var merged = [WatchlistItem]()
-                                 for item in watchlistService.savedItems + (response?.items ?? []) {
+                                 // Prefer API items first so real IDs take precedence for deletion
+                                 // Local optimistic items will be appended if they haven't synced yet
+                                 for item in (response?.items ?? []) + watchlistService.savedItems {
                                      let lname = item.name.lowercased()
                                      if !seenSet.contains(lname) {
                                          seenSet.insert(lname)
@@ -252,7 +253,27 @@ struct WatchlistScreen: View {
         var combinedItems = watchlistService.savedItems
         if let apiItems = response?.items {
             for apiItem in apiItems {
-                if !combinedItems.contains(where: { $0.name.lowercased() == apiItem.name.lowercased() }) {
+                if let localIndex = combinedItems.firstIndex(where: { $0.name.lowercased() == apiItem.name.lowercased() }) {
+                    // Ensure the local item uses the real API ID instead of a generated pseudo-UUID
+                    if combinedItems[localIndex].id != apiItem.id {
+                        let updated = WatchlistItem(
+                            id: apiItem.id, 
+                            name: combinedItems[localIndex].name, 
+                            status: combinedItems[localIndex].status, 
+                            subtitle: combinedItems[localIndex].subtitle, 
+                            badge: combinedItems[localIndex].badge, 
+                            iconType: combinedItems[localIndex].iconType
+                        )
+                        combinedItems[localIndex] = updated
+                        
+                        // Sync it back to local storage
+                        DispatchQueue.main.async {
+                            if let sIdx = self.watchlistService.savedItems.firstIndex(where: { $0.name.lowercased() == apiItem.name.lowercased() }) {
+                                self.watchlistService.savedItems[sIdx] = updated
+                            }
+                        }
+                    }
+                } else {
                     combinedItems.append(apiItem)
                 }
             }
