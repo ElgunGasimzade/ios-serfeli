@@ -55,6 +55,7 @@ class LocalWatchlistService: ObservableObject {
                         )
                         self.savedItems[index] = updatedItem
                         self.persistItems()
+                        NotificationCenter.default.post(name: NSNotification.Name("WatchlistNeedsRefresh"), object: nil)
                     }
                 }
             } catch {

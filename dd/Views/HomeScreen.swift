@@ -105,90 +105,16 @@ struct HomeScreen: View {
                     } else if let feed = homeFeed {
                         // HOME FEED MODE
                         VStack(alignment: .leading, spacing: 8) { // Reduced from 16 to 8
-                            // Sort & Filter Bar
-                            HStack {
-                                // Sort Menu
-                                Menu {
-                                    ForEach(SortOption.allCases) { option in
-                                        Button(action: {
-                                            if selectedSort != option {
-                                                selectedSort = option
-                                                Task { await loadFeed(reload: true) }
-                                            }
-                                        }) {
-                                            if selectedSort == option {
-                                                Label(option.displayName, systemImage: "checkmark")
-                                            } else {
-                                                Text(option.displayName)
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        // Dynamic Icon based on Sort
-                                        Group {
-                                            if selectedSort == .priceAsc {
-                                                Image(systemName: "arrow.up.circle.fill")
-                                            } else if selectedSort == .priceDesc {
-                                                Image(systemName: "arrow.down.circle.fill")
-                                            } else {
-                                                Image(systemName: "arrow.up.arrow.down")
-                                            }
-                                        }
-                                        .frame(width: 20)
-                                        
-                                        Text(selectedSort == .discountPct ? "Sort".localized : selectedSort.displayName)
-                                            .id(selectedSort) // Optimize transition
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                    }
-                                    .font(.subheadline)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 8)
-                                    .background(selectedSort != .discountPct ? Color.blue.opacity(0.1) : Color(.systemGray6))
-                                    .foregroundColor(selectedSort != .discountPct ? .blue : .primary)
-                                    .cornerRadius(8)
+                            // Sort & Filter Bar (Wraps to new line if text is too long)
+                            ViewThatFits(in: .horizontal) {
+                                HStack {
+                                    SortMenuContent(selectedSort: $selectedSort, passAction: loadFeed)
+                                    FilterMenuContent(selectedStore: $selectedStore, availableStores: availableStores, passAction: loadFeed)
                                 }
-                                
-                                // Filter Menu
-                                Menu {
-                                    Button("All Stores".localized) {
-                                        if selectedStore != nil {
-                                            selectedStore = nil
-                                            Task { await loadFeed(reload: true) }
-                                        }
-                                    }
-                                    
-                                    ForEach(availableStores, id: \.self) { store in
-                                        Button(action: {
-                                            if selectedStore != store {
-                                                selectedStore = store
-                                                Task { await loadFeed(reload: true) }
-                                            }
-                                        }) {
-                                            if selectedStore == store {
-                                                Label(store, systemImage: "checkmark")
-                                            } else {
-                                                Text(store)
-                                            }
-                                        }
-                                    }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "line.3.horizontal.decrease.circle")
-                                        Text(selectedStore ?? "All Stores".localized)
-                                            .id(selectedStore)
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                    }
-                                    .font(.subheadline)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(selectedStore != nil ? Color.blue.opacity(0.1) : Color(.systemGray6))
-                                    .foregroundColor(selectedStore != nil ? .blue : .primary)
-                                    .cornerRadius(8)
+                                VStack(alignment: .leading, spacing: 12) {
+                                    SortMenuContent(selectedSort: $selectedSort, passAction: loadFeed)
+                                    FilterMenuContent(selectedStore: $selectedStore, availableStores: availableStores, passAction: loadFeed)
                                 }
-                                
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
@@ -445,6 +371,110 @@ struct CategoryPill: View {
                 RoundedRectangle(cornerRadius: 20)
                     .stroke(Color.gray.opacity(0.3), lineWidth: 1)
             )
+    }
+}
+
+struct SortMenuContent: View {
+    @Binding var selectedSort: HomeScreen.SortOption
+    var passAction: (_ reload: Bool) async -> Void
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            // Dynamic Icon based on Sort
+            Group {
+                if selectedSort == .priceAsc {
+                    Image(systemName: "arrow.up.circle.fill")
+                } else if selectedSort == .priceDesc {
+                    Image(systemName: "arrow.down.circle.fill")
+                } else {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+            }
+            .frame(width: 20)
+            
+            Text(selectedSort == .discountPct ? "Sort".localized : selectedSort.displayName)
+                .lineLimit(1)
+                // Layout priority removed so ViewThatFits can accurately measure intrinsic size
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .background(selectedSort != .discountPct ? Color.blue.opacity(0.1) : Color(.systemGray6))
+        .foregroundColor(selectedSort != .discountPct ? .blue : .primary)
+        .cornerRadius(8)
+        .overlay(
+            Menu {
+                ForEach(HomeScreen.SortOption.allCases) { option in
+                    Button(action: {
+                        if selectedSort != option {
+                            selectedSort = option
+                            Task {
+                                await passAction(true)
+                            }
+                        }
+                    }) {
+                        if selectedSort == option {
+                            Label(option.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(option.displayName)
+                        }
+                    }
+                }
+            } label: {
+                Color.white.opacity(0.001)
+            }
+        )
+    }
+}
+
+struct FilterMenuContent: View {
+    @Binding var selectedStore: String?
+    var availableStores: [String]
+    var passAction: (_ reload: Bool) async -> Void
+    
+    var body: some View {
+        HStack {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+            Text(selectedStore ?? "All Stores".localized)
+                .lineLimit(1)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(selectedStore != nil ? Color.blue.opacity(0.1) : Color(.systemGray6))
+        .foregroundColor(selectedStore != nil ? .blue : .primary)
+        .cornerRadius(8)
+        .overlay(
+            Menu {
+                Button("All Stores".localized) {
+                    if selectedStore != nil {
+                        selectedStore = nil
+                        Task {
+                            await passAction(true)
+                        }
+                    }
+                }
+                
+                ForEach(availableStores, id: \.self) { store in
+                    Button(action: {
+                        if selectedStore != store {
+                            selectedStore = store
+                            Task {
+                                await passAction(true)
+                            }
+                        }
+                    }) {
+                        if selectedStore == store {
+                            Label(store, systemImage: "checkmark")
+                        } else {
+                            Text(store)
+                        }
+                    }
+                }
+            } label: {
+                Color.white.opacity(0.001)
+            }
+        )
     }
 }
 

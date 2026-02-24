@@ -13,6 +13,8 @@ struct WatchlistScreen: View {
     @State private var selectedBrandGroup: [BrandGroup] = []
     @State private var isAddingToPlan = false
     @State private var editMode: EditMode = .inactive
+    @State private var hasFetchedInitial = false
+    let refreshPublisher = NotificationCenter.default.publisher(for: NSNotification.Name("WatchlistNeedsRefresh"))
     @FocusState private var isInputFocused: Bool
     
     @ObservedObject private var watchlistService = LocalWatchlistService.shared
@@ -201,15 +203,14 @@ struct WatchlistScreen: View {
              }
              .environment(\.editMode, $editMode)
              .task {
-                 do {
-                     if let userId = AuthService.shared.userId {
-                         response = try await APIService.shared.getWatchlist(userId: userId)
-                     }
-                     await refreshWatchlistData()
-                 } catch {
-                     print("Error loading watchlist: \(error)")
+                 guard !hasFetchedInitial else { return }
+                 hasFetchedInitial = true
+                 await fetchWatchlist()
+             }
+             .onReceive(refreshPublisher) { _ in
+                 Task {
+                     await fetchWatchlist()
                  }
-                 isLoading = false
              }
              .onChange(of: searchQuery) { query in
                  Task {
@@ -484,7 +485,7 @@ struct WatchlistScreen: View {
                         name: option.brandName,
                         brand: nil,
                         category: nil, // Missing
-                        store: nil, // Missing in BrandItem, partially in dealText
+                        store: option.dealText.replacingOccurrences(of: "at ", with: ""), // Extracted from dealText
                         imageUrl: option.logoUrl,
                         price: option.price ?? 0,
                         originalPrice: option.originalPrice,
@@ -500,6 +501,18 @@ struct WatchlistScreen: View {
             isAddingToPlan = false
             navigateToBrandSelection = false // Pop back
         }
+    }
+    
+    private func fetchWatchlist() async {
+        do {
+            if let userId = AuthService.shared.userId {
+                response = try await APIService.shared.getWatchlist(userId: userId)
+            }
+            await refreshWatchlistData()
+        } catch {
+            print("Error loading watchlist: \(error)")
+        }
+        isLoading = false
     }
 }
 
