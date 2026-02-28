@@ -2,7 +2,7 @@ import Foundation
 
 // API Configuration
 struct APIConstants {
-     static let baseURL = "https://newbackjs.onrender.com/api/v1"
+     static let baseURL = "https://api.serfeli.app/api/v1"
 }
 
 // MARK: - Auth
