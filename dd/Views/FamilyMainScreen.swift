@@ -88,10 +88,10 @@ struct FamilyMainScreen: View {
                     )
                 
                 VStack(spacing: 8) {
-                    Text("No Groups Yet")
+                    Text("No Groups Yet".localized)
                         .font(.title2)
                         .bold()
-                    Text("Create or join a group to start sharing shopping lists")
+                    Text("Create or join a group to start sharing shopping lists".localized)
                         .font(.subheadline)
                         .foregroundColor(.gray)
                         .multilineTextAlignment(.center)
@@ -101,7 +101,7 @@ struct FamilyMainScreen: View {
             
             VStack(spacing: 16) {
                 Button(action: { showCreateDialog = true }) {
-                    Text("Create Group")
+                    Text("Create Group".localized)
                         .font(.headline)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -111,7 +111,7 @@ struct FamilyMainScreen: View {
                 }
                 
                 Button(action: { showJoinDialog = true }) {
-                    Text("Join with Code")
+                    Text("Join with Code".localized)
                         .font(.headline)
                         .foregroundColor(.blue)
                         .frame(maxWidth: .infinity)
@@ -325,7 +325,7 @@ struct GroupCard: View {
                     // Invite Code
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Invite Code")
+                            Text("Invite Code".localized)
                                 .font(.caption)
                                 .foregroundColor(.gray)
                             Text(group.inviteCode)
@@ -338,7 +338,7 @@ struct GroupCard: View {
                         }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "doc.on.doc")
-                                Text("Copy")
+                                Text("Copy".localized)
                             }
                             .font(.caption)
                             .padding(.horizontal, 12)
@@ -356,7 +356,7 @@ struct GroupCard: View {
                             .environmentObject(localization)) {
                             HStack {
                                 Image(systemName: "list.bullet")
-                                Text("Shopping Lists")
+                                Text("Shopping Lists".localized)
                                 Spacer()
                                 if group.pendingItemsCount > 0 {
                                     Text("\(group.pendingItemsCount)")
@@ -379,7 +379,7 @@ struct GroupCard: View {
                         Button(action: { showLeaveAlert = true }) {
                             HStack {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
-                                Text("Leave Group")
+                                Text("Leave Group".localized)
                                 Spacer()
                             }
                             .foregroundColor(.red)
@@ -397,13 +397,13 @@ struct GroupCard: View {
         .background(Color.white)
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
-        .alert("Leave Group?", isPresented: $showLeaveAlert) {
-            Button("Leave", role: .destructive) {
+        .alert("Leave Group?".localized, isPresented: $showLeaveAlert) {
+            Button("Leave".localized, role: .destructive) {
                 Task { await onLeave() }
             }
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel".localized, role: .cancel) { }
         } message: {
-            Text("Are you sure you want to leave \(group.name)?")
+            Text("Are you sure you want to leave".localized + " \(group.name)?")
         }
     }
 }
@@ -421,27 +421,27 @@ struct CreateGroupSheet: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Group Name")) {
-                    TextField("e.g., My Family, Roommates", text: $groupName)
+                Section(header: Text("Group Name".localized)) {
+                    TextField("e.g., My Family, Roommates".localized, text: $groupName)
                         .autocapitalization(.words)
                 }
                 
                 Section {
-                    Text("Create a group to share shopping lists with family and friends")
+                    Text("Create a group to share shopping lists with family and friends".localized)
                         .font(.caption)
                         .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Create Group")
+            .navigationTitle("Create Group".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel".localized) {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+                    Button("Create".localized) {
                         Task {
                             isCreating = true
                             await onCreate(groupName)
@@ -467,28 +467,28 @@ struct JoinGroupSheet: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Invite Code")) {
-                    TextField("6-digit code", text: $inviteCode)
+                Section(header: Text("Invite Code".localized)) {
+                    TextField("6-digit code".localized, text: $inviteCode)
                         .keyboardType(.numberPad)
                         .autocapitalization(.none)
                 }
                 
                 Section {
-                    Text("Enter the 6-digit invite code shared by a group member")
+                    Text("Enter the 6-digit invite code shared by a group member".localized)
                         .font(.caption)
                         .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Join Group")
+            .navigationTitle("Join Group".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button("Cancel".localized) {
                         dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Join") {
+                    Button("Join".localized) {
                         Task {
                             isJoining = true
                             await onJoin(inviteCode)

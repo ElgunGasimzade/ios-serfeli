@@ -349,7 +349,7 @@ struct DealFoundCard: View {
                     
                     VStack(alignment: .leading) {
                         Text(group.itemName).font(.headline)
-                        Text(group.itemDetails).font(.caption).foregroundColor(.gray)
+                        Text(group.itemDetails.localized).font(.caption).foregroundColor(.gray)
                     }
                 }
                 
@@ -590,7 +590,7 @@ struct NoDealFoundCard: View {
                 
                 VStack(alignment: .leading) {
                     Text(group.itemName).font(.headline).foregroundColor(.gray)
-                    Text(group.itemDetails).font(.caption).foregroundColor(.gray)
+                    Text(group.itemDetails.localized).font(.caption).foregroundColor(.gray)
                 }
                 Spacer()
                 Text("No Deals".localized)

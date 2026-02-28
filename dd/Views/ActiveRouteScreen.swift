@@ -39,7 +39,7 @@ struct ActiveRouteScreen: View {
                     // Broken down for compiler
                     let amountText = String(format: "%.2f", Double(totalSavings))
                     let text = "\(amountText) ₼ " + "Savings".localized
-                Text(text)
+                    Text(text)
                         .font(.caption).bold()
                         .foregroundColor(.green)
                         .padding(.horizontal, 12)

@@ -25,7 +25,7 @@ struct AddItemsToFamilyListScreen: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
+                        Button("Cancel".localized) {
                             dismiss()
                         }
                     }
@@ -60,10 +60,10 @@ struct AddItemsToFamilyListScreen: View {
     
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Add Items to Family List")
+            Text("Add Items to Family List".localized)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.primary)
-            Text("Add items to compare prices across stores")
+            Text("Add items to compare prices across stores".localized)
                 .font(.subheadline)
                 .foregroundColor(.gray)
         }
@@ -88,7 +88,7 @@ struct AddItemsToFamilyListScreen: View {
                 .foregroundColor(.gray)
                 .font(.system(size: 18))
             
-            TextField("Search e.g. 'milk'", text: Binding(
+            TextField("Search e.g. 'milk'".localized, text: Binding(
                 get: { inputText },
                 set: { newValue in
                     inputText = newValue
@@ -113,7 +113,7 @@ struct AddItemsToFamilyListScreen: View {
                     inputText = ""
                     suggestions = []
                 }) {
-                    Text("Add")
+                    Text("Add".localized)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.blue)
                         .padding(.horizontal, 8)
@@ -194,10 +194,10 @@ struct AddItemsToFamilyListScreen: View {
                 .scaledToFit()
                 .frame(width: 80, height: 80)
                 .foregroundColor(.gray.opacity(0.2))
-            Text("Your list is empty")
+            Text("Your list is empty".localized)
                 .font(.headline)
                 .foregroundColor(.gray)
-            Text("Start typing to add items")
+            Text("Start typing to add items".localized)
                 .font(.subheadline)
                 .foregroundColor(.gray.opacity(0.8))
             Spacer()
@@ -269,7 +269,7 @@ struct AddItemsToFamilyListScreen: View {
                 showingDeals = true
             }) {
                 HStack {
-                    Text("Find Best Deals")
+                    Text("Find Best Deals".localized)
                         .font(.system(size: 18, weight: .bold))
                     Image(systemName: "arrow.right.circle.fill")
                         .font(.system(size: 22))
@@ -420,12 +420,12 @@ struct BrandSelectionForFamilyScreen: View {
                             VStack(alignment: .leading, spacing: 24) {
                                 // Header
                                 HStack {
-                                    Text("Review Items")
+                                    Text("Review Items".localized)
                                         .font(.title3).bold()
                                     Spacer()
                                 }
                                 
-                                Text("Select the best deals for your items")
+                                Text("Select the best deals for your items".localized)
                                     .font(.subheadline)
                                     .foregroundColor(.gray)
                                 
@@ -459,8 +459,8 @@ struct BrandSelectionForFamilyScreen: View {
                                     let isSkipped = custom == "[SKIPPED]"
                                     // Add if it has a comment, or if it wasn't found (and NOT explicitly skipped)
                                     if hasComment || (isNotFound && !isSkipped) {
-                                        let nameToUse = hasComment ? "\(group.itemName) (\(custom ?? ""))" : group.itemName
-                                        results.append((name: nameToUse, brand: nil, store: nil, price: nil, originalPrice: nil, productId: nil))
+                                        let brandToUse = hasComment ? custom : nil
+                                        results.append((name: group.itemName, brand: brandToUse, store: nil, price: nil, originalPrice: nil, productId: nil))
                                     }
                                 }
                             }
@@ -477,14 +477,14 @@ struct BrandSelectionForFamilyScreen: View {
                             dismiss()
                         }) {
                             VStack(spacing: 4) {
-                                Text("Add to Family List")
+                                Text("Add to Family List".localized)
                                     .font(.headline)
                                 if selectedIds.count > 0 {
-                                    Text("\(selectedIds.count) deal(s) selected • Save \(String(format: "%.2f", totalSavings)) ₼")
+                                    Text("\(selectedIds.count) \("deal(s) selected".localized) • \("Save".localized) \(String(format: "%.2f", totalSavings)) ₼")
                                         .font(.caption)
                                         .opacity(0.9)
                                 } else {
-                                    Text("Add items")
+                                    Text("Add items".localized)
                                         .font(.caption)
                                         .opacity(0.9)
                                 }
@@ -498,10 +498,10 @@ struct BrandSelectionForFamilyScreen: View {
                         }
                     }
                 } else {
-                    Text("No deals found or failed to load")
+                    Text("No deals found or failed to load".localized)
                 }
             }
-            .navigationTitle("Find Deals")
+            .navigationTitle("Find Deals".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

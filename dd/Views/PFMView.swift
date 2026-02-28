@@ -95,7 +95,9 @@ struct PFMView: View {
                                     Spacer()
                                     
                                     // Savings Badge
-                                    let savings = item.route.stops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
+                                    let savings = item.status == "completed"
+                                        ? item.route.stops.flatMap { $0.items }.filter { $0.checked }.reduce(0.0) { $0 + $1.savings }
+                                        : item.route.stops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
                                     VStack(alignment: .trailing) {
                                         Text("\("Save".localized) \(String(format: "%.2f", savings)) ₼")
                                             .font(.headline)
@@ -315,7 +317,9 @@ struct HistoryCard: View {
                 Spacer()
                 
                 VStack(alignment: .trailing) {
-                    let savings = item.route.stops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
+                    let savings = item.status == "completed"
+                        ? item.route.stops.flatMap { $0.items }.filter { $0.checked }.reduce(0.0) { $0 + $1.savings }
+                        : item.route.stops.flatMap { $0.items }.reduce(0.0) { $0 + $1.savings }
                     Text("\("Saved".localized) \(String(format: "%.2f", Double(savings))) ₼")
                         .font(.headline)
                         .foregroundColor(.green)

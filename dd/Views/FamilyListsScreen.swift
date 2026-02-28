@@ -26,8 +26,16 @@ struct FamilyListsScreen: View {
                             listRow(list)
                         }
                         .padding(.vertical, 4)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                if let index = lists.firstIndex(where: { $0.id == list.id }) {
+                                    deleteList(at: IndexSet(integer: index))
+                                }
+                            } label: {
+                                Label("Delete".localized, systemImage: "trash")
+                            }
+                        }
                     }
-                    .onDelete(perform: deleteList)
                 }
                 .listStyle(InsetGroupedListStyle())
             }
@@ -40,16 +48,16 @@ struct FamilyListsScreen: View {
                 }
             }
         }
-        .alert("New Shopping List", isPresented: $showingCreateList) {
-            TextField("List Name", text: $newListName)
-            Button("Cancel", role: .cancel) { newListName = "" }
-            Button("Create") {
+        .alert("New Shopping List".localized, isPresented: $showingCreateList) {
+            TextField("List Name".localized, text: $newListName)
+            Button("Cancel".localized, role: .cancel) { newListName = "" }
+            Button("Create".localized) {
                 Task {
                     await createList()
                 }
             }
         } message: {
-            Text("Enter a name for your new list")
+            Text("Enter a name for your new list".localized)
         }
         .task {
             await loadLists()
@@ -65,16 +73,16 @@ struct FamilyListsScreen: View {
                 .font(.system(size: 60))
                 .foregroundColor(.gray.opacity(0.5))
             
-            Text("No shopping lists yet")
+            Text("No shopping lists yet".localized)
                 .font(.headline)
             
-            Text("Create a list to start planning your shopping")
+            Text("Create a list to start planning your shopping".localized)
                 .font(.subheadline)
                 .foregroundColor(.gray)
                 .multilineTextAlignment(.center)
             
             Button(action: { showingCreateList = true }) {
-                Text("Create New List")
+                Text("Create New List".localized)
                     .font(.headline)
                     .foregroundColor(.white)
                     .padding()
@@ -93,12 +101,12 @@ struct FamilyListsScreen: View {
             
             HStack {
                 if list.pendingCount > 0 {
-                    Text("\(list.pendingCount) items needed")
+                    Text("\(list.pendingCount) " + "items needed".localized)
                         .foregroundColor(.blue)
                         .font(.caption)
                         .bold()
                 } else {
-                    Text("All items purchased")
+                    Text("All items purchased".localized)
                         .foregroundColor(.green)
                         .font(.caption)
                 }

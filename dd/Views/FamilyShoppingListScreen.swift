@@ -48,7 +48,7 @@ struct FamilyShoppingListScreen: View {
             // Add a delete button in toolbar if items selected?
             if isSelectionMode && !selectedItemIds.isEmpty {
                  ToolbarItem(placement: .bottomBar) {
-                     Button("Delete Selected") {
+                     Button("Delete Selected".localized) {
                          Task {
                              await deleteSelectedItems()
                          }
@@ -99,17 +99,17 @@ struct FamilyShoppingListScreen: View {
                 .foregroundColor(.gray.opacity(0.5))
             
             VStack(spacing: 8) {
-                Text("No Items Yet")
+                Text("No Items Yet".localized)
                     .font(.title3)
                     .bold()
-                Text("Add items to start your family shopping list")
+                Text("Add items to start your family shopping list".localized)
                     .font(.subheadline)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
             }
             
             Button(action: { showAddItemsScreen = true }) {
-                Label("Add Items", systemImage: "plus")
+                Label("Add Items".localized, systemImage: "plus")
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: 200)
@@ -132,10 +132,10 @@ struct FamilyShoppingListScreen: View {
                 if !isSelectionMode {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("\(items.count) Items")
+                            Text("\(items.count) " + "Items".localized)
                                 .font(.title2)
                                 .bold()
-                            Text("\(pendingCount) pending • \(purchasedCount) purchased")
+                            Text("\(pendingCount) " + "pending".localized + " • \(purchasedCount) " + "purchased".localized)
                                 .font(.caption)
                                 .foregroundColor(.gray)
                         }
@@ -145,7 +145,7 @@ struct FamilyShoppingListScreen: View {
                         // Total Cost Display
                         if totalPendingCost > 0 {
                             VStack(alignment: .trailing, spacing: 4) {
-                                Text("Total Estimate")
+                                Text("Total Estimate".localized)
                                     .font(.caption)
                                     .foregroundColor(.gray)
                                 Text(String(format: "%.2f ₼", totalPendingCost))
@@ -158,7 +158,7 @@ struct FamilyShoppingListScreen: View {
                     .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                     .listRowBackground(Color.clear)
                 } else {
-                    Text("\(selectedItemIds.count) selected")
+                    Text("\(selectedItemIds.count) " + "selected".localized)
                         .font(.headline)
                         .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                         .listRowBackground(Color.clear)
@@ -208,13 +208,13 @@ struct FamilyShoppingListScreen: View {
                         Button(role: .destructive) {
                             Task { await deleteItem(item) }
                         } label: {
-                            Label("Delete", systemImage: "trash")
+                            Label("Delete".localized, systemImage: "trash")
                         }
                         
                         Button {
                             selectingBrandForItem = item
                         } label: {
-                            Label("Edit", systemImage: "pencil")
+                            Label("Edit".localized, systemImage: "pencil")
                         }
                         .tint(.blue)
                     }
@@ -276,7 +276,7 @@ struct FamilyShoppingListScreen: View {
         } catch {
             print("Error loading list: \(error)")
             if items.isEmpty {
-                errorMessage = "Failed to load items"
+                errorMessage = "Failed to load items".localized
             }
         }
         isLoading = false
@@ -434,7 +434,7 @@ struct FamilyShoppingItemCard: View {
                     
                     Spacer()
                     
-                    Text("Added by \(item.addedBy.username)")
+                    Text("Added by".localized + " \(item.addedBy.username)")
                         .font(.caption2)
                         .foregroundColor(.gray)
                 }
@@ -457,7 +457,7 @@ struct FamilyShoppingItemCard: View {
                     
                     Menu {
                         Button(action: onEdit) {
-                            Label("Change Brand/Deal", systemImage: "arrow.triangle.2.circlepath")
+                            Label("Change Brand/Deal".localized, systemImage: "arrow.triangle.2.circlepath")
                         }
                     } label: {
                         Image(systemName: "ellipsis")
@@ -521,23 +521,23 @@ struct EditFamilyItemScreen: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Item Details")) {
+                Section(header: Text("Item Details".localized)) {
                     Text(item.itemName)
                         .font(.headline)
                     
-                    Stepper("Quantity: \(quantity)", value: $quantity, in: 1...99)
+                    Stepper("Quantity".localized + ": \(quantity)", value: $quantity, in: 1...99)
                     
-                    TextField("Notes (optional)", text: $notes)
+                    TextField("Notes (optional)".localized, text: $notes)
                 }
             }
-            .navigationTitle("Edit Item")
+            .navigationTitle("Edit Item".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel".localized) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Save".localized) {
                         Task {
                             await onSave(quantity, notes.isEmpty ? nil : notes)
                             dismiss()
