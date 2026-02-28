@@ -62,3 +62,4 @@ extension View {
         self.modifier(ToastModifier(isPresented: isPresented, message: message, icon: icon))
     }
 }
+
