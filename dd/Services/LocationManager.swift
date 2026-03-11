@@ -29,25 +29,40 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     override init() {
-        let savedEnabled = UserDefaults.standard.bool(forKey: "isLocationEnabled")
         let savedRange = UserDefaults.standard.double(forKey: "searchRangeKm")
+        let hasSavedEnabledPref = UserDefaults.standard.object(forKey: "isLocationEnabled") != nil
+        let savedEnabled = hasSavedEnabledPref
+            ? UserDefaults.standard.bool(forKey: "isLocationEnabled")
+            : true // Default to enabled on fresh install
         
         self.isLocationEnabled = savedEnabled
-        self.searchRangeKm = (savedRange == 0) ? 5.0 : savedRange
+        self.searchRangeKm = (savedRange == 0) ? 2.0 : savedRange
         
         super.init()
         
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
         
+        // On the very first launch (no saved pref), save the default true value
+        if !hasSavedEnabledPref {
+            UserDefaults.standard.set(true, forKey: "isLocationEnabled")
+        }
+        
+        // Always check/request permission at startup if location is enabled
         if isLocationEnabled {
             requestLocation()
         }
     }
     
     func requestLocation() {
-        locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
+        // Only request authorization — startUpdatingLocation is called in the delegate
+        // callback once permission is confirmed, avoiding the race condition.
+        let status = locationManager.authorizationStatus
+        if status == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+        } else if status == .authorizedWhenInUse || status == .authorizedAlways {
+            locationManager.startUpdatingLocation()
+        }
     }
     
     func stopLocation() {

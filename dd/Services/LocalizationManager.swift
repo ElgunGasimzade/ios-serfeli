@@ -11,11 +11,11 @@ class LocalizationManager: ObservableObject {
     }
      
     init() {
-        self.language = UserDefaults.standard.string(forKey: "selectedLanguage") ?? "en"
+        self.language = UserDefaults.standard.string(forKey: "selectedLanguage") ?? "az"
     }
     
     func localized(_ key: String) -> String {
-        let dict = translations[language] ?? translations["en"]!
+        let dict = translations[language] ?? translations["az"]!
         return dict[key] ?? key
     }
     
