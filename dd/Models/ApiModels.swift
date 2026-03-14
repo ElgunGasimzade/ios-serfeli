@@ -157,6 +157,40 @@ struct RouteItem: Codable, Identifiable {
     let checked: Bool
 }
 
+// MARK: - Notifications
+struct NotificationItem: Codable, Identifiable {
+    let id: Int
+    let title: String
+    let body: String
+    let dataPayload: [String: String]?
+    var isRead: Bool
+    let createdAt: String
+    
+    enum CodingKeys: String, CodingKey {
+        case id, title, body
+        case dataPayload = "data_payload"
+        case isRead = "is_read"
+        case createdAt = "created_at"
+    }
+}
+
+struct NotificationHistoryResponse: Codable {
+    let success: Bool
+    let data: [NotificationItem]
+    let page: Int
+    let limit: Int
+}
+
+struct NotificationUnreadResponse: Codable {
+    let success: Bool
+    let count: Int
+}
+
+struct NotificationSuccessResponse: Codable {
+    let success: Bool
+    let message: String
+}
+
 // MARK: - Trip Summary
 struct TripSummary: Codable {
     let totalSavings: Double

@@ -50,6 +50,9 @@ class AuthService: ObservableObject {
                     if let user = response.user {
                         self.user = user
                         self.saveUser(user)
+                        
+                        // Retry FCM sync now that user ID is available
+                        NotificationManager.shared.syncTokenWithBackend()
                     }
                 }
             } catch {

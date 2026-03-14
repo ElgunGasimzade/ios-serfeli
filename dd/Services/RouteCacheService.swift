@@ -10,6 +10,14 @@ class RouteCacheService: ObservableObject {
     
     // Separate source of truth for stats (since history might be filtered/deleted locally)
     @Published var lifetimeStats: APIService.UserStats = APIService.UserStats(totalTrips: 0, totalSavings: 0.0)
+
+    var hasActivePlan: Bool {
+        history.contains { $0.status == "active" }
+    }
+
+    var activePlanCount: Int {
+        history.filter { $0.status == "active" }.count
+    }
     
     // Persist to disk just in case offline, but truth is backend
     private let historyKey = "route_history"

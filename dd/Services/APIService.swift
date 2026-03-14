@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import UIKit
 
 enum APIError: Error, LocalizedError {
     case invalidURL
@@ -394,6 +395,27 @@ class APIService {
         return AuthResponse(user: updateRes.user, isNewUser: false)
     }
     
+    // Notifications
+    func registerFCMToken(userId: String, deviceId: String, fcmToken: String, platform: String = "ios") async throws {
+        guard let url = URL(string: "\(baseURL)/notifications/register-token") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: Any] = [
+            "userId": userId,
+            "deviceId": deviceId,
+            "fcmToken": fcmToken,
+            "platform": platform
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
     // Plans
     
     func savePlan(userId: String, route: RouteDetails) async throws -> String { // Returns PlanID
@@ -728,6 +750,105 @@ class APIService {
             throw APIError.serverError
         }
         return try JSONDecoder().decode(FamilyShoppingListResponse.self, from: data)
+    }
+    
+    // MARK: - Notifications
+    
+    func getNotifications(page: Int = 1, limit: Int = 20) async throws -> NotificationHistoryResponse {
+        var queryItems = [URLQueryItem(name: "page", value: String(page)), URLQueryItem(name: "limit", value: String(limit))]
+        if let userId = AuthService.shared.userId {
+            queryItems.append(URLQueryItem(name: "userId", value: userId))
+        }
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        queryItems.append(URLQueryItem(name: "deviceId", value: deviceId))
+        
+        var u = URLComponents(string: "\(baseURL)/notifications")!
+        u.queryItems = queryItems
+        guard let url = u.url else { throw APIError.invalidURL }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        return try JSONDecoder().decode(NotificationHistoryResponse.self, from: data)
+    }
+    
+    func getUnreadNotificationCount() async throws -> Int {
+        var queryItems = [URLQueryItem]()
+        if let userId = AuthService.shared.userId {
+            queryItems.append(URLQueryItem(name: "userId", value: userId))
+        }
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        queryItems.append(URLQueryItem(name: "deviceId", value: deviceId))
+        
+        var u = URLComponents(string: "\(baseURL)/notifications/unread-count")!
+        u.queryItems = queryItems
+        guard let url = u.url else { throw APIError.invalidURL }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        let res = try JSONDecoder().decode(NotificationUnreadResponse.self, from: data)
+        return res.count
+    }
+    
+    func markNotificationAsRead(id: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/notifications/\(id)/read") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
+    func deleteNotification(id: Int) async throws {
+        guard let url = URL(string: "\(baseURL)/notifications/\(id)") else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
+    func markAllNotificationsAsRead() async throws {
+        var queryItems = [URLQueryItem]()
+        if let userId = AuthService.shared.userId {
+            queryItems.append(URLQueryItem(name: "userId", value: userId))
+        }
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        queryItems.append(URLQueryItem(name: "deviceId", value: deviceId))
+        var u = URLComponents(string: "\(baseURL)/notifications/read-all")!
+        u.queryItems = queryItems
+        guard let url = u.url else { throw APIError.invalidURL }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+    }
+    
+    func deleteAllNotifications() async throws {
+        var queryItems = [URLQueryItem]()
+        if let userId = AuthService.shared.userId {
+            queryItems.append(URLQueryItem(name: "userId", value: userId))
+        }
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        queryItems.append(URLQueryItem(name: "deviceId", value: deviceId))
+        var u = URLComponents(string: "\(baseURL)/notifications/delete-all")!
+        u.queryItems = queryItems
+        guard let url = u.url else { throw APIError.invalidURL }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
     }
     
     func addToFamilyShoppingList(familyId: String, userId: String, itemName: String, quantity: Int = 1, notes: String? = nil, brandName: String? = nil, storeName: String? = nil, listId: Int? = nil, price: Double? = nil, originalPrice: Double? = nil, productId: String? = nil) async throws -> FamilyShoppingItem {

@@ -43,6 +43,7 @@ struct HomeScreen: View {
     @EnvironmentObject var localization: LocalizationManager
     
     @ObservedObject private var locationManager = LocationManager.shared
+    @StateObject private var notifManager = NotificationManager.shared
     
     var body: some View {
         NavigationView {
@@ -61,6 +62,23 @@ struct HomeScreen: View {
                         
                         Spacer()
                         
+                        NavigationLink(destination: NotificationListView()
+                            .environmentObject(localization)) {
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.gray)
+                                    .padding(.trailing, 8)
+                                
+                                if notifManager.unreadCount > 0 {
+                                    Circle()
+                                        .fill(Color.red)
+                                        .frame(width: 10, height: 10)
+                                        .offset(x: -6, y: -2)
+                                }
+                            }
+                        }
+                        
                         NavigationLink(destination: ProfileScreen()
                             .environmentObject(localization)) {
                             Image(systemName: "gearshape.fill")
@@ -70,6 +88,9 @@ struct HomeScreen: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
+                    .onAppear {
+                        notifManager.fetchUnreadCount()
+                    }
 
                     // Search Bar - always show
                     SearchBar(text: $searchQuery)
